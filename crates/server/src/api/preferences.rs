@@ -15,136 +15,26 @@ use std::collections::HashSet;
 use axum::Json;
 use axum::extract::State;
 use myledger_core::{
-    Account, Budget, Cadence, Category, Goal, Period, RecurringItem, RecurringKind, Rule, Settings,
-    Tag, normalize_merchant, now_timestamp,
+    Account, Budget, Category, Goal, RecurringItem, Rule, Tag, normalize_merchant, now_timestamp,
+};
+// The request and response shapes live in `core::wire`: the web app builds
+// them and this module parses them, so one definition is what keeps the two
+// sides from drifting apart. See the note at the top of that module.
+pub use myledger_core::wire::{
+    BudgetInput, GoalInput, NamedInput, PreferencesRequest, PreferencesResponse,
+    RecurringItemInput, RuleInput,
 };
 use myledger_db::lookups::{accounts, categories, tags};
 use myledger_db::settings::keys;
 use myledger_db::{
     Db, budgets, dismissed, goals, recurring_items, rules as db_rules, settings as db_settings,
 };
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::AppState;
 use crate::api::{check_not_negative, clean_date, clean_name, clean_recurring_fields};
 use crate::error::ApiError;
 use crate::extract::ApiJson;
-
-/// A category, account or tag as the client holds it.
-#[derive(Debug, Deserialize)]
-pub struct NamedInput {
-    /// Absent for something newly created in the UI.
-    #[serde(default)]
-    pub id: Option<Uuid>,
-    pub name: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RuleInput {
-    #[serde(default)]
-    pub id: Option<Uuid>,
-    pub when_text: String,
-    #[serde(default)]
-    pub then_category_id: Option<Uuid>,
-    #[serde(default)]
-    pub then_tag_id: Option<Uuid>,
-    #[serde(default = "yes")]
-    pub enabled: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct BudgetInput {
-    #[serde(default)]
-    pub id: Option<Uuid>,
-    #[serde(default)]
-    pub category_id: Option<Uuid>,
-    pub monthly_limit_cents: i64,
-    #[serde(default = "yes")]
-    pub active: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct GoalInput {
-    #[serde(default)]
-    pub id: Option<Uuid>,
-    pub name: String,
-    pub target_cents: i64,
-    #[serde(default)]
-    pub current_cents: i64,
-    #[serde(default)]
-    pub due_date: Option<String>,
-    #[serde(default)]
-    pub note: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RecurringItemInput {
-    #[serde(default)]
-    pub id: Option<Uuid>,
-    pub name: String,
-    #[serde(default)]
-    pub category_id: Option<Uuid>,
-    pub amount_cents: i64,
-    pub cadence: Cadence,
-    #[serde(default)]
-    pub next_date: Option<String>,
-    #[serde(default)]
-    pub account_id: Option<Uuid>,
-    pub kind: RecurringKind,
-    #[serde(default = "yes")]
-    pub active: bool,
-}
-
-fn yes() -> bool {
-    true
-}
-
-/// Any subset of the user's preferences.
-#[derive(Debug, Default, Deserialize)]
-pub struct PreferencesRequest {
-    #[serde(default)]
-    pub categories: Option<Vec<NamedInput>>,
-    #[serde(default)]
-    pub accounts: Option<Vec<NamedInput>>,
-    #[serde(default)]
-    pub tags: Option<Vec<NamedInput>>,
-    #[serde(default)]
-    pub rules: Option<Vec<RuleInput>>,
-    #[serde(default)]
-    pub budgets: Option<Vec<BudgetInput>>,
-    #[serde(default)]
-    pub goals: Option<Vec<GoalInput>>,
-    #[serde(default)]
-    pub recurring_items: Option<Vec<RecurringItemInput>>,
-    #[serde(default)]
-    pub dismissed_patterns: Option<Vec<String>>,
-    #[serde(default)]
-    pub assets_cents: Option<i64>,
-    #[serde(default)]
-    pub liabilities_cents: Option<i64>,
-    #[serde(default)]
-    pub net_worth_configured: Option<bool>,
-    #[serde(default)]
-    pub selected_period: Option<Period>,
-}
-
-/// The preferences after the update. Transactions and documents are excluded —
-/// this is the small half of the state, and returning it saves a follow-up read.
-#[derive(Debug, Serialize)]
-pub struct PreferencesResponse {
-    /// Which groups this request actually touched.
-    pub updated: Vec<&'static str>,
-    pub categories: Vec<Category>,
-    pub accounts: Vec<Account>,
-    pub tags: Vec<Tag>,
-    pub rules: Vec<Rule>,
-    pub budgets: Vec<Budget>,
-    pub goals: Vec<Goal>,
-    pub recurring_items: Vec<RecurringItem>,
-    pub dismissed_patterns: Vec<String>,
-    pub settings: Settings,
-}
 
 /// Applies a subset of preferences.
 pub async fn put_preferences(
@@ -248,7 +138,9 @@ pub async fn put_preferences(
     }
 
     Ok(Json(PreferencesResponse {
-        updated,
+        // The shared shape holds owned strings so a client can deserialise
+        // it; the push sites stay `&'static str`.
+        updated: updated.into_iter().map(String::from).collect(),
         categories: categories::list_all_categories(db).await?,
         accounts: accounts::list_all_accounts(db).await?,
         tags: tags::list_all_tags(db).await?,

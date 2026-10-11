@@ -12,6 +12,7 @@
 use dioxus::prelude::*;
 
 mod api;
+mod components;
 mod login;
 mod pages;
 mod shell;

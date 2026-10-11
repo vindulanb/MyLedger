@@ -7,9 +7,18 @@
 //! to browser storage.
 
 use dioxus::prelude::*;
-use myledger_core::StateResponse;
+use myledger_core::{Period, PreferencesRequest, StateResponse};
 
 use crate::api;
+
+/// Today's date in the browser's own time zone, as `YYYY-MM-DD`.
+///
+/// Local, not UTC: a transaction entered at 9pm on the 31st belongs to the
+/// 31st as far as the person entering it is concerned, and every period
+/// boundary is reckoned the same way.
+pub fn today() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
+}
 
 /// Whether we are signed in, as far as the browser can tell.
 ///
@@ -31,6 +40,16 @@ pub enum Load {
     Failed(String),
 }
 
+/// A short-lived message shown over the app, for the outcome of an action.
+///
+/// Errors stay until dismissed; successes fade. Both are transient UI, not
+/// state — nothing is ever read back out of here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notice {
+    pub text: String,
+    pub is_error: bool,
+}
+
 /// A dialog owned by the app shell rather than by a page, because the top bar
 /// can open it from anywhere.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +68,14 @@ pub struct Store {
     pub ledger: Signal<Option<StateResponse>>,
     pub load: Signal<Load>,
     pub modal: Signal<Option<Modal>>,
+    /// The latest action's outcome, shown as a toast.
+    pub notice: Signal<Option<Notice>>,
+    /// A period the user has just chosen but the server hasn't confirmed.
+    ///
+    /// Shown immediately so the selector feels instant, and dropped either
+    /// way once the server answers: on success the refreshed ledger carries
+    /// the new value, and on failure dropping it *is* the revert.
+    pub pending_period: Signal<Option<Period>>,
 }
 
 impl Store {
@@ -59,6 +86,8 @@ impl Store {
             ledger: Signal::new(None),
             load: Signal::new(Load::Idle),
             modal: Signal::new(None),
+            notice: Signal::new(None),
+            pending_period: Signal::new(None),
         })
     }
 
@@ -153,6 +182,72 @@ impl Store {
     /// Closes whatever dialog is open.
     pub fn close_modal(mut self) {
         self.modal.set(None);
+    }
+
+    /// The period the dashboard and transactions list are showing.
+    ///
+    /// An unconfirmed choice wins over the stored one so the selector
+    /// responds at once; everything else reads through here, which is why
+    /// changing the period on one screen changes it on the other.
+    pub fn period(&self) -> Period {
+        if let Some(pending) = *self.pending_period.read() {
+            return pending;
+        }
+        self.ledger
+            .read()
+            .as_ref()
+            .map(|state| state.settings.selected_period)
+            .unwrap_or(Period::AllTime)
+    }
+
+    /// Changes the period, saving it to the server.
+    ///
+    /// Optimistic: the new value shows immediately, and a failure puts the
+    /// old one back and says why, rather than leaving the screen claiming a
+    /// period the database doesn't have.
+    pub fn set_period(self, period: Period) {
+        let mut store = self;
+        if store.period() == period {
+            return;
+        }
+        store.pending_period.set(Some(period));
+
+        spawn(async move {
+            let request =
+                PreferencesRequest { selected_period: Some(period), ..Default::default() };
+            match api::put_preferences(&request).await {
+                Ok(_) => {
+                    // Refetch before clearing, so the selector never flickers
+                    // back through the old value on its way to the new one.
+                    store.load_ledger().await;
+                    store.pending_period.set(None);
+                }
+                Err(failure) => {
+                    store.pending_period.set(None);
+                    store.fail(failure);
+                }
+            }
+        });
+    }
+
+    /// Reports a failed call.
+    ///
+    /// A lapsed session is not an error to show — it means the cookie expired
+    /// underneath us, so the right response is the login screen.
+    pub fn fail(mut self, failure: api::ApiFailure) {
+        if failure.is_unauthorized() {
+            self.ledger.set(None);
+            self.load.set(Load::Idle);
+            self.modal.set(None);
+            self.session.set(Session::SignedOut);
+            return;
+        }
+        self.notice.set(Some(Notice { text: failure.message, is_error: true }));
+    }
+
+    /// Dismisses the current toast.
+    pub fn clear_notice(mut self) {
+        self.notice.set(None);
     }
 
     /// The signed-in user's name, if any.

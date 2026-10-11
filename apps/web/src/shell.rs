@@ -8,6 +8,7 @@
 use dioxus::prelude::*;
 
 use crate::Route;
+use crate::components::Toast;
 use crate::store::{Load, Modal, Store};
 
 /// A destination, with the icon used in both navs.
@@ -109,6 +110,7 @@ pub fn Shell() -> Element {
             }
             BottomNav {}
             ModalHost {}
+            Toast {}
         }
     }
 }

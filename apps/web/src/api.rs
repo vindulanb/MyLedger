@@ -10,7 +10,10 @@
 //! not the session, and not financial data. The database is canonical.
 
 use gloo_net::http::Request;
-use myledger_core::{ErrorResponse, LoginRequest, LoginResponse, MeResponse, StateResponse};
+use myledger_core::{
+    ErrorResponse, LoginRequest, LoginResponse, MeResponse, PreferencesRequest,
+    PreferencesResponse, StateResponse,
+};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use web_sys::RequestCredentials;
@@ -57,6 +60,16 @@ pub async fn login(username: &str, password: &str) -> ApiResult<LoginResponse> {
     post("/auth/login", &body).await
 }
 
+/// `PUT /api/v1/preferences` — saves a subset of the user's preferences.
+///
+/// Only the groups present in `request` are touched. The reply carries the
+/// preferences as they now stand, but callers still refetch the whole ledger
+/// afterwards: a mutation can change transactions too (deleting a category
+/// re-points the rows that used it), and the database is canonical.
+pub async fn put_preferences(request: &PreferencesRequest) -> ApiResult<PreferencesResponse> {
+    put("/preferences", request).await
+}
+
 /// `POST /api/v1/auth/logout`.
 pub async fn logout() -> ApiResult<()> {
     let request = Request::post(&url("/auth/logout"))
@@ -80,6 +93,14 @@ async fn get<T: DeserializeOwned>(path: &str) -> ApiResult<T> {
 
 async fn post<B: Serialize, T: DeserializeOwned>(path: &str, body: &B) -> ApiResult<T> {
     let request = Request::post(&url(path))
+        .credentials(RequestCredentials::SameOrigin)
+        .json(body)
+        .map_err(ApiFailure::offline)?;
+    send(request).await
+}
+
+async fn put<B: Serialize, T: DeserializeOwned>(path: &str, body: &B) -> ApiResult<T> {
+    let request = Request::put(&url(path))
         .credentials(RequestCredentials::SameOrigin)
         .json(body)
         .map_err(ApiFailure::offline)?;

@@ -9,12 +9,16 @@
 //! - [`fingerprint`] — duplicate detection.
 //! - [`format`] — rendering money for display.
 //! - [`validate`] — server-side validation of untrusted input.
+//! - [`period`] — what a selected period means in dates.
+//! - [`analysis`] — the totals, charts and counts the dashboard shows.
 //! - [`recurring`] — finding the repeating charges in a transaction history.
 //! - [`wire`] — the request and response shapes the API speaks in.
 
+pub mod analysis;
 pub mod fingerprint;
 pub mod format;
 pub mod model;
+pub mod period;
 pub mod recurring;
 pub mod validate;
 pub mod wire;
@@ -29,8 +33,14 @@ pub use model::{
 pub use recurring::{
     Confidence, NameLookup, RecurringSuggestion, detect_recurring, normalize_merchant,
 };
+pub use analysis::{
+    CategorySlice, MonthFlow, Names, PeriodSummary, monthly_flow, most_recent, needs_review_count,
+    previous_range, spending_by_category, summarise,
+};
+pub use period::DateRange;
 pub use wire::{
-    ErrorResponse, LoginRequest, LoginResponse, MeResponse, StateResponse,
+    BudgetInput, ErrorResponse, GoalInput, LoginRequest, LoginResponse, MeResponse, NamedInput,
+    PreferencesRequest, PreferencesResponse, RecurringItemInput, RuleInput, StateResponse,
 };
 pub use validate::{
     ValidatedTransaction, ValidationError, validate_amount_cents, validate_date, validate_kind,
