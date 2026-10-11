@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cargo clippy --workspace --all-targets -q)",
+      "PowerShell(if \\($?\\) { \"clippy clean\" })",
+      "PowerShell(cargo build -p server)",
+      "PowerShell(cargo test -p server)",
+      "PowerShell(cargo test --workspace -q)",
+      "PowerShell(cargo test -p server --test recurring)",
+      "PowerShell(cargo test -p server --test recurring -q)",
+      "PowerShell(cargo test -p server --test documents --test sms_rules)",
+      "PowerShell(cargo test -p server --test documents -q)",
+      "PowerShell(cargo test --workspace -q 2>$null)",
+      "PowerShell(cargo test -p server --test wipe -q)"
+    ]
+  }
+}

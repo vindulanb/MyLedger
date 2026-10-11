@@ -1,0 +1,17 @@
+[workspace]
+resolver = "3"
+members = ["crates/core", "crates/db", "crates/server"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+publish = false
+
+# Internal crates are referenced by package name; their library targets are
+# named `myledger_core` / `myledger_db` so that a package called `core` cannot
+# shadow the `core` crate from the standard library inside dependents.
+[workspace.dependencies]
+core = { path = "crates/core" }
+db = { path = "crates/db" }

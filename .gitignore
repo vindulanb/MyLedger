@@ -1,0 +1,25 @@
+# Rust build output
+/target/
+**/*.rs.bk
+*.pdb
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime data — the SQLite database and uploaded documents
+/data/
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Editor / OS noise
+.claude/settings.local.json
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
