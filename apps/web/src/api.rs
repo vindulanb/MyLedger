@@ -11,8 +11,9 @@
 
 use gloo_net::http::Request;
 use myledger_core::{
-    ErrorResponse, ImportCsvReport, ImportOptions, LoginRequest, LoginResponse, MeResponse,
-    PreferencesRequest, PreferencesResponse, StateResponse, Transaction,
+    DocumentExtractionRule, ErrorResponse, ExtractionResponse, ImportCsvReport, ImportOptions,
+    LoginRequest, LoginResponse, MeResponse, PreferencesRequest, PreferencesResponse,
+    StateResponse, StoredExtractionResponse, Transaction,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -247,6 +248,118 @@ pub async fn import_csv(
         .body(body)
         .map_err(ApiFailure::offline)?;
     send(request).await
+}
+
+/// `POST /api/v1/documents/{id}/extract` — reads a document and runs the
+/// rules over it.
+pub async fn extract_document(id: Uuid) -> ApiResult<ExtractionResponse> {
+    let request = Request::post(&url(&format!("/documents/{id}/extract")))
+        .credentials(RequestCredentials::SameOrigin)
+        .build()
+        .map_err(ApiFailure::offline)?;
+    send(request).await
+}
+
+/// `GET /api/v1/documents/{id}/extraction` — what the last read found.
+///
+/// A 404 means the document has never been read, which is not an error worth
+/// showing: the screen simply offers to read it.
+pub async fn stored_extraction(id: Uuid) -> ApiResult<Option<StoredExtractionResponse>> {
+    match get::<StoredExtractionResponse>(&format!("/documents/{id}/extraction")).await {
+        Ok(found) => Ok(Some(found)),
+        Err(failure) if failure.status == 404 => Ok(None),
+        Err(failure) => Err(failure),
+    }
+}
+
+/// `PATCH /api/v1/documents/{id}` — links a document, or moves its status.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct DocumentPatch {
+    /// `Some(None)` clears the link; `None` leaves it as it is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub linked_transaction_id: Option<Option<Uuid>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+}
+
+pub async fn patch_document(id: Uuid, patch: &DocumentPatch) -> ApiResult<()> {
+    let request = Request::patch(&url(&format!("/documents/{id}")))
+        .credentials(RequestCredentials::SameOrigin)
+        .json(patch)
+        .map_err(ApiFailure::offline)?;
+    send_discarding(request).await
+}
+
+/// `DELETE /api/v1/documents/{id}` — removes the row and the bytes behind it.
+pub async fn delete_document(id: Uuid) -> ApiResult<()> {
+    let request = Request::delete(&url(&format!("/documents/{id}")))
+        .credentials(RequestCredentials::SameOrigin)
+        .build()
+        .map_err(ApiFailure::offline)?;
+    send_discarding(request).await
+}
+
+/// Where the browser can fetch a stored document.
+///
+/// A plain URL rather than a fetch: the server streams it with the right
+/// `Content-Disposition`, so an ordinary link downloads it and the on-disk
+/// layout stays private.
+pub fn document_download_url(id: Uuid) -> String {
+    url(&format!("/documents/{id}/download"))
+}
+
+/// The fields of a document extraction rule, as the form sends them.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ExtractionRuleInput {
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename_pattern: Option<String>,
+    pub body_regex: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount_group: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merchant_group: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date_group: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind_hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_category_id: Option<Uuid>,
+    pub enabled: bool,
+}
+
+/// `POST /api/v1/extraction-rules`.
+pub async fn create_extraction_rule(
+    input: &ExtractionRuleInput,
+) -> ApiResult<DocumentExtractionRule> {
+    post("/extraction-rules", input).await
+}
+
+/// `PATCH /api/v1/extraction-rules/{id}` — only the enabled flag, for the
+/// toggle. A full edit deletes and recreates, so the server validates the
+/// whole rule rather than a patchwork of it.
+#[derive(Debug, Clone, Serialize)]
+pub struct ExtractionRuleToggle {
+    pub enabled: bool,
+}
+
+pub async fn toggle_extraction_rule(id: Uuid, enabled: bool) -> ApiResult<()> {
+    let request = Request::patch(&url(&format!("/extraction-rules/{id}")))
+        .credentials(RequestCredentials::SameOrigin)
+        .json(&ExtractionRuleToggle { enabled })
+        .map_err(ApiFailure::offline)?;
+    send_discarding(request).await
+}
+
+/// `DELETE /api/v1/extraction-rules/{id}`.
+pub async fn delete_extraction_rule(id: Uuid) -> ApiResult<()> {
+    let request = Request::delete(&url(&format!("/extraction-rules/{id}")))
+        .credentials(RequestCredentials::SameOrigin)
+        .build()
+        .map_err(ApiFailure::offline)?;
+    send_discarding(request).await
 }
 
 /// `POST /api/v1/auth/logout`.

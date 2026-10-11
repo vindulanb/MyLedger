@@ -796,6 +796,45 @@ pub fn parse_signed_cents(value: &str) -> Option<(i64, bool)> {
     Some((signed, marked_credit))
 }
 
+/// Reads a date that can only mean one thing.
+///
+/// For a lone date with no column of others to compare it against — a captured
+/// group from a receipt, a date typed into a form. ISO and month-name forms
+/// are read; a numeric form is read only when one of its parts is above 12 and
+/// so cannot be a month.
+///
+/// `03/04/2026` therefore returns `None`. It is the 3rd of April or the 4th of
+/// March, nothing in the string says which, and resolving it to one of the two
+/// would put a transaction a month out without ever mentioning it.
+///
+/// ```
+/// # use myledger_core::csv::normalize_date_unambiguous;
+/// assert_eq!(normalize_date_unambiguous("2026-04-03").as_deref(), Some("2026-04-03"));
+/// assert_eq!(normalize_date_unambiguous("25/09/2026").as_deref(), Some("2026-09-25"));
+/// assert_eq!(normalize_date_unambiguous("03/04/2026"), None);
+/// ```
+pub fn normalize_date_unambiguous(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+    if let Some(date) = iso_date(value) {
+        return Some(date);
+    }
+    if let Some(date) = named_date(value) {
+        return Some(date);
+    }
+
+    let (a, b, year) = numeric_parts(value)?;
+    match (a > 12, b > 12) {
+        // A part above 12 cannot be a month, so the other one is.
+        (true, false) => build_date(year, b, a),
+        (false, true) => build_date(year, a, b),
+        // Both above 12, or neither: unreadable either way.
+        _ => None,
+    }
+}
+
 // ---- turning the table into rows ------------------------------------------
 
 /// Reads every data row, given a settled plan.
@@ -1475,5 +1514,39 @@ mod tests {
         assert_eq!(read.rows[2].date, "2026-10-25");
         assert!(read.rows[2].is_income);
         assert_eq!(read.rows[2].amount_cents, 200_000);
+    }
+
+    // ---- a date with nothing to compare it against ---------------------
+
+    #[test]
+    fn an_iso_or_named_date_alone_is_never_ambiguous() {
+        assert_eq!(normalize_date_unambiguous("2026-04-03").as_deref(), Some("2026-04-03"));
+        assert_eq!(normalize_date_unambiguous("2026/04/03").as_deref(), Some("2026-04-03"));
+        assert_eq!(normalize_date_unambiguous("4 September 2026").as_deref(), Some("2026-09-04"));
+        assert_eq!(normalize_date_unambiguous("Sep 4, 2026").as_deref(), Some("2026-09-04"));
+    }
+
+    #[test]
+    fn a_numeric_date_alone_is_read_only_when_it_can_mean_one_thing() {
+        // A part above 12 cannot be a month.
+        assert_eq!(normalize_date_unambiguous("25/09/2026").as_deref(), Some("2026-09-25"));
+        assert_eq!(normalize_date_unambiguous("09/25/2026").as_deref(), Some("2026-09-25"));
+        assert_eq!(normalize_date_unambiguous("31-01-2026").as_deref(), Some("2026-01-31"));
+    }
+
+    #[test]
+    fn a_date_that_reads_either_way_is_refused() {
+        // The whole point: 03/04/2026 is two different days and nothing here
+        // says which.
+        for ambiguous in ["03/04/2026", "01/02/2026", "12/11/2026", "1/2/26"] {
+            assert_eq!(normalize_date_unambiguous(ambiguous), None, "{ambiguous}");
+        }
+    }
+
+    #[test]
+    fn nonsense_alone_is_refused() {
+        for bad in ["", "   ", "pending", "99/99/2026", "2026", "--"] {
+            assert_eq!(normalize_date_unambiguous(bad), None, "{bad:?}");
+        }
     }
 }

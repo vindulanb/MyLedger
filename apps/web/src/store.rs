@@ -385,6 +385,36 @@ impl Store {
         self.load_ledger().await;
     }
 
+    /// Runs an async job that changes the database, then refetches.
+    ///
+    /// The shape every screen's one-off actions share: flip `saving`, do the
+    /// thing, reload, report. A failure is shown and the ledger is still
+    /// reloaded, because a call that failed part-way may have changed
+    /// something anyway.
+    pub async fn act<F, T>(mut self, job: F, done: &str) -> Option<T>
+    where
+        F: std::future::Future<Output = Result<T, api::ApiFailure>>,
+    {
+        self.saving.set(true);
+        let outcome = job.await;
+        self.saving.set(false);
+
+        match outcome {
+            Ok(value) => {
+                self.load_ledger().await;
+                if !done.is_empty() {
+                    self.say(done);
+                }
+                Some(value)
+            }
+            Err(failure) => {
+                self.load_ledger().await;
+                self.fail(failure);
+                None
+            }
+        }
+    }
+
     /// Reports a successful action.
     pub fn say(mut self, text: impl Into<String>) {
         self.notice.set(Some(Notice { text: text.into(), is_error: false }));

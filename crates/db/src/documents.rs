@@ -125,6 +125,23 @@ pub async fn link_document(
     Ok(result.rows_affected() > 0)
 }
 
+/// Writes a document's status and link together, returning whether it existed.
+///
+/// One statement rather than two calls, so a document cannot end up linked to
+/// a transaction while still sitting at `review` because the second write
+/// failed. Only these two fields are writable: the filename, type and size
+/// are what the file *is*, and the bytes on disk are the record of that.
+pub async fn update_document(db: &Db, document: &Document) -> Result<bool, DbError> {
+    let result =
+        sqlx::query("UPDATE documents SET status = ?, linked_transaction_id = ? WHERE id = ?")
+            .bind(document.status.as_str())
+            .bind(opt_uuid_text(document.linked_transaction_id))
+            .bind(document.id.to_string())
+            .execute(db.pool())
+            .await?;
+    Ok(result.rows_affected() > 0)
+}
+
 /// Deletes a document row, returning it so the caller can delete the file.
 pub async fn delete_document(db: &Db, id: Uuid) -> Result<Option<Document>, DbError> {
     let Some(document) = get_document(db, id).await? else {

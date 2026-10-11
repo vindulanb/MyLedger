@@ -27,8 +27,10 @@ pub struct WipeCounts {
     pub transaction_tags: u64,
     pub tags: u64,
     pub documents: u64,
+    pub document_extractions: u64,
     pub rules: u64,
     pub sms_parse_rules: u64,
+    pub document_extraction_rules: u64,
     pub budgets: u64,
     pub goals: u64,
     pub recurring_items: u64,
@@ -42,8 +44,10 @@ impl WipeCounts {
             + self.transaction_tags
             + self.tags
             + self.documents
+            + self.document_extractions
             + self.rules
             + self.sms_parse_rules
+            + self.document_extraction_rules
             + self.budgets
             + self.goals
             + self.recurring_items
@@ -78,12 +82,18 @@ pub async fn wipe_financial_data(db: &Db) -> Result<Wiped, DbError> {
     // a field in a struct literal. Children go before parents: documents and
     // transaction_tags both reference transactions, and clearing them first
     // saves SQLite from rewriting every link on the way past.
+    // Before `documents`, which cascades onto it: counting them here means
+    // the report says how many there were rather than silently zero.
+    let document_extractions =
+        delete_all(&mut conn, "DELETE FROM document_extractions").await?;
     let documents_deleted = delete_all(&mut conn, "DELETE FROM documents").await?;
     let transaction_tags = delete_all(&mut conn, "DELETE FROM transaction_tags").await?;
     let transactions = delete_all(&mut conn, "DELETE FROM transactions").await?;
     let tags = delete_all(&mut conn, "DELETE FROM tags").await?;
     let rules = delete_all(&mut conn, "DELETE FROM rules").await?;
     let sms_parse_rules = delete_all(&mut conn, "DELETE FROM sms_parse_rules").await?;
+    let document_extraction_rules =
+        delete_all(&mut conn, "DELETE FROM document_extraction_rules").await?;
     let budgets = delete_all(&mut conn, "DELETE FROM budgets").await?;
     let goals = delete_all(&mut conn, "DELETE FROM goals").await?;
     let recurring_items = delete_all(&mut conn, "DELETE FROM recurring_items").await?;
@@ -97,8 +107,10 @@ pub async fn wipe_financial_data(db: &Db) -> Result<Wiped, DbError> {
             transaction_tags,
             tags,
             documents: documents_deleted,
+            document_extractions,
             rules,
             sms_parse_rules,
+            document_extraction_rules,
             budgets,
             goals,
             recurring_items,

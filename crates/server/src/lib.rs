@@ -13,6 +13,7 @@ pub mod api;
 pub mod auth;
 pub mod config;
 pub mod error;
+pub mod text;
 pub mod extract;
 
 use std::path::Path;
@@ -162,9 +163,23 @@ pub fn build_app(state: AppState) -> Router {
         )
         .route(
             "/documents/{id}",
-            get(api::documents::get_document).delete(api::documents::delete_document),
+            get(api::documents::get_document)
+                .patch(api::documents::patch_document)
+                .delete(api::documents::delete_document),
         )
         .route("/documents/{id}/download", get(api::documents::download_document))
+        .route("/documents/{id}/extract", post(api::extraction::extract_document))
+        .route("/documents/{id}/extraction", get(api::extraction::get_extraction))
+        .route(
+            "/extraction-rules",
+            get(api::extraction::list_rules).post(api::extraction::create_rule),
+        )
+        .route(
+            "/extraction-rules/{id}",
+            get(api::extraction::get_rule)
+                .patch(api::extraction::patch_rule)
+                .delete(api::extraction::delete_rule),
+        )
         .route(
             "/sms-rules",
             get(api::sms_rules::list_rules).post(api::sms_rules::create_rule),

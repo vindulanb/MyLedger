@@ -12,8 +12,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    Account, Budget, Category, Document, Goal, Period, RecurringItem, Rule, Settings, SmsParseRule,
-    Tag, Transaction,
+    Account, Budget, Category, Document, DocumentExtractionRule, Goal, Period, RecurringItem, Rule,
+    Settings, SmsParseRule, Tag, Transaction,
 };
 
 /// Everything a client needs, as returned by `GET /api/v1/state`.
@@ -39,6 +39,9 @@ pub struct StateResponse {
 
     pub rules: Vec<Rule>,
     pub sms_parse_rules: Vec<SmsParseRule>,
+    /// Rules for reading an uploaded document. Separate from the SMS ones so
+    /// a pattern written for a bank's messages is never applied to a receipt.
+    pub document_extraction_rules: Vec<DocumentExtractionRule>,
     pub budgets: Vec<Budget>,
     pub goals: Vec<Goal>,
     pub recurring_items: Vec<RecurringItem>,
@@ -333,4 +336,44 @@ pub struct SkippedDetail {
     /// 1-based line in the file.
     pub line: usize,
     pub reason: String,
+}
+
+// ---- document extraction -----------------------------------------------
+
+/// What running the extraction rules over one document produced.
+///
+/// `outcome` is one of `no-text`, `no-match`, `matched` or `ambiguous`. It is
+/// a string rather than an enum because it is a report about what happened
+/// rather than a stored token, and the client branches on it to decide what
+/// to show.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExtractionResponse {
+    /// The document as it now stands, including its new status.
+    pub document: Document,
+    pub outcome: String,
+    /// Why there is no text, when there isn't. A sentence fit to show.
+    pub note: Option<String>,
+    /// The text that was read, for the user to write a pattern against.
+    pub text: Option<String>,
+    /// Every reading the rules produced. More than one means they disagree,
+    /// and the user has to choose.
+    pub candidates: Vec<crate::textrules::Candidate>,
+    /// The transaction this created, if the reading was unambiguous.
+    pub created_transaction: Option<Transaction>,
+    /// How many enabled rules were tried, so "no match" is distinguishable
+    /// from "no rules written yet".
+    pub rules_tried: usize,
+}
+
+/// What a previous read of a document found, with the current rules applied.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StoredExtractionResponse {
+    pub document_id: uuid::Uuid,
+    pub text: Option<String>,
+    pub note: Option<String>,
+    pub read_at: String,
+    /// Recomputed now rather than remembered, so it reflects the rules as
+    /// they are and not as they were when the file was read.
+    pub outcome: String,
+    pub candidates: Vec<crate::textrules::Candidate>,
 }

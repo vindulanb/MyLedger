@@ -15,7 +15,7 @@ use myledger_core::{StateResponse, now_timestamp};
 use myledger_db::lookups::{accounts, categories, tags};
 use myledger_db::{
     budgets, dismissed, documents as db_documents, goals, recurring_items, rules, seed, settings,
-    sms_rules, transactions, wipe as db_wipe,
+    extraction as db_extraction, sms_rules, transactions, wipe as db_wipe,
 };
 use serde::{Deserialize, Serialize};
 
@@ -53,6 +53,7 @@ pub async fn get_state(State(state): State<AppState>) -> Result<Json<StateRespon
         tags: tags::list_all_tags(db).await?,
         rules: rules::list_rules(db).await?,
         sms_parse_rules: sms_rules::list_sms_rules(db).await?,
+        document_extraction_rules: db_extraction::list_rules(db).await?,
         budgets: budgets::list_budgets(db).await?,
         goals: goals::list_goals(db).await?,
         recurring_items: recurring_items::list_recurring_items(db).await?,
@@ -86,8 +87,10 @@ pub struct DeletedCounts {
     pub transaction_tags: u64,
     pub tags: u64,
     pub documents: u64,
+    pub document_extractions: u64,
     pub rules: u64,
     pub sms_parse_rules: u64,
+    pub document_extraction_rules: u64,
     pub budgets: u64,
     pub goals: u64,
     pub recurring_items: u64,
@@ -171,8 +174,10 @@ pub async fn wipe_state(
             transaction_tags: counts.transaction_tags,
             tags: counts.tags,
             documents: counts.documents,
+            document_extractions: counts.document_extractions,
             rules: counts.rules,
             sms_parse_rules: counts.sms_parse_rules,
+            document_extraction_rules: counts.document_extraction_rules,
             budgets: counts.budgets,
             goals: counts.goals,
             recurring_items: counts.recurring_items,

@@ -12,6 +12,7 @@
 //! - [`period`] — what a selected period means in dates.
 //! - [`filter`] — search and filters for the transactions list.
 //! - [`csv`] — reading bank and card statements.
+//! - [`textrules`] — pulling a transaction out of text, by rule.
 //! - [`analysis`] — the totals, charts and counts the dashboard shows.
 //! - [`recurring`] — finding the repeating charges in a transaction history.
 //! - [`wire`] — the request and response shapes the API speaks in.
@@ -24,13 +25,15 @@ pub mod format;
 pub mod model;
 pub mod period;
 pub mod recurring;
+pub mod textrules;
 pub mod validate;
 pub mod wire;
 
 pub use fingerprint::transaction_fingerprint;
 pub use format::{money, parse_money, signed_money};
 pub use model::{
-    Account, Budget, Cadence, Category, Document, DocumentStatus, Goal, ParseEnumError, Period,
+    Account, Budget, Cadence, Category, Document, DocumentExtractionRule, DocumentStatus, Goal,
+    ParseEnumError, Period,
     RecurringItem, RecurringKind, Rule, Settings, SmsKindHint, SmsParseRule, Tag, Transaction,
     TransactionKind, TransactionSource, now_timestamp, timestamp_after,
 };
@@ -46,11 +49,14 @@ pub use csv::{
     ReadRows, SkippedRow, Table, read_csv, read_rows,
 };
 pub use filter::{AccountChoice, CategoryChoice, TransactionFilter};
+pub use textrules::{
+    Candidate, Context, MatchOutcome, RuleProblem, RuleView, check_rule, match_text,
+};
 pub use period::DateRange;
 pub use wire::{
-    BudgetInput, ErrorResponse, GoalInput, ImportColumns, ImportCsvReport, ImportOptions,
-    LoginRequest, LoginResponse, MeResponse, NamedInput, PreferencesRequest, PreferencesResponse,
-    RecurringItemInput, RuleInput, StateResponse,
+    BudgetInput, ErrorResponse, ExtractionResponse, GoalInput, ImportColumns, ImportCsvReport,
+    ImportOptions, LoginRequest, LoginResponse, MeResponse, NamedInput, PreferencesRequest,
+    PreferencesResponse, RecurringItemInput, RuleInput, StateResponse, StoredExtractionResponse,
 };
 pub use validate::{
     ValidatedTransaction, ValidationError, validate_amount_cents, validate_date, validate_kind,

@@ -1524,6 +1524,154 @@ a {
   overflow-y: auto;
 }
 
+
+/* ---- documents --------------------------------------------------------- */
+
+/* A download link, never a path: the server streams the bytes and names the
+ * file, and where it sits on disk is never shown. */
+.filelink {
+  font-weight: 550;
+  word-break: break-word;
+}
+
+.badge-doc-queued {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.badge-doc-stored {
+  border-color: var(--positive);
+  color: var(--positive);
+}
+
+.badge-doc-review {
+  border-color: var(--slice-2);
+  color: var(--slice-2);
+}
+
+.rowactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.checkline.small {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ---- reading a document ------------------------------------------------ */
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.25rem 0;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.review-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.candidate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.candidate-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.manuallink {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.manuallink-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+
+/* The text read out of a document. Monospaced and scrollable: the user is
+ * writing a regular expression against exactly these characters, so the
+ * spacing has to be what the rule will actually see. */
+.doctext {
+  margin: 0.4rem 0;
+  padding: 0.75rem;
+  max-height: 16rem;
+  overflow: auto;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.rulepattern {
+  display: block;
+  margin-top: 0.2rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.ruleform {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.9rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
 /* ---- narrow screens --------------------------------------------------- */
 
 @media (max-width: 900px) {
@@ -1649,6 +1797,15 @@ a {
 
   .formgrid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rowactions {
+    justify-content: flex-start;
+  }
+
+  .manuallink-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 
 

@@ -19,6 +19,7 @@ pub mod auth;
 pub mod budgets;
 pub mod dismissed;
 pub mod documents;
+pub mod extraction;
 pub mod goals;
 pub mod lookups;
 pub mod recurring_items;

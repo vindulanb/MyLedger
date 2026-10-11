@@ -12,6 +12,7 @@
 //! reference anyway, but as a 500 rather than as an answer the user can act on.
 
 pub mod documents;
+pub mod extraction;
 pub mod import;
 pub mod preferences;
 pub mod recurring;

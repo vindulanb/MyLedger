@@ -27,7 +27,7 @@ use axum::response::{IntoResponse, Response};
 use myledger_core::{Document, DocumentStatus, now_timestamp};
 use myledger_db::documents as db_documents;
 use myledger_db::transactions as db_transactions;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
@@ -175,6 +175,84 @@ pub async fn upload_documents(
     let documents: Vec<Document> = staged.into_iter().map(|entry| entry.document).collect();
     tracing::info!(count = documents.len(), "stored uploaded documents");
     Ok((StatusCode::CREATED, Json(UploadResponse { uploaded: documents.len(), documents })))
+}
+
+/// A change to a stored document.
+///
+/// Only the link and the status: the filename, size and type are what the
+/// file *is*, and the bytes on disk are the record of that. Correcting those
+/// means uploading the right file.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PatchDocumentRequest {
+    /// Absent leaves the link alone; `null` clears it.
+    #[serde(default, deserialize_with = "crate::api::explicit_option")]
+    pub linked_transaction_id: Option<Option<Uuid>>,
+    #[serde(default)]
+    pub status: Option<DocumentStatus>,
+}
+
+/// Links a document to a transaction, or moves it between statuses.
+///
+/// This is how a document that extraction could not read gets filed: the user
+/// records the transaction themselves and then attaches the receipt to it.
+/// Linking sets the transaction's `receipt` flag, and unlinking does not
+/// clear it — another document may still be attached, and this endpoint has
+/// no business deciding that.
+pub async fn patch_document(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    body: axum::body::Bytes,
+) -> Result<Json<Document>, ApiError> {
+    let request: PatchDocumentRequest = crate::extract::optional_json(&body)?;
+    if request.linked_transaction_id.is_none() && request.status.is_none() {
+        return Err(ApiError::bad_request(
+            "nothing to update: send a linked_transaction_id, a status, or both",
+        ));
+    }
+
+    let Some(mut document) = db_documents::get_document(&state.db, id).await? else {
+        return Err(ApiError::not_found(format!("no document with id {id}")));
+    };
+
+    if let Some(link) = request.linked_transaction_id {
+        match link {
+            Some(transaction_id) => {
+                let Some(transaction) =
+                    db_transactions::get_transaction(&state.db, transaction_id).await?
+                else {
+                    return Err(ApiError::bad_request(format!(
+                        "no transaction with id {transaction_id}"
+                    )));
+                };
+                if transaction.deleted_at.is_some() {
+                    return Err(ApiError::bad_request(format!(
+                        "transaction {transaction_id} has been deleted"
+                    )));
+                }
+                document.linked_transaction_id = Some(transaction_id);
+
+                // The flag means "a document is really on file", so it is set
+                // here rather than trusted from a client.
+                if !transaction.receipt {
+                    let mut transaction = transaction;
+                    transaction.receipt = true;
+                    transaction.updated_at = now_timestamp();
+                    db_transactions::update_transaction(&state.db, &transaction).await?;
+                }
+            }
+            None => document.linked_transaction_id = None,
+        }
+    }
+
+    if let Some(status) = request.status {
+        document.status = status;
+    }
+
+    if !db_documents::update_document(&state.db, &document).await? {
+        return Err(ApiError::not_found(format!("no document with id {id}")));
+    }
+    Ok(Json(document))
 }
 
 /// Streams every file in the request to disk.

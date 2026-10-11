@@ -266,6 +266,80 @@ pub struct Rule {
     pub updated_at: String,
 }
 
+/// A rule for reading a transaction out of an uploaded document's text.
+///
+/// The same shape as [`SmsParseRule`], because it is the same idea applied to
+/// a different kind of text, and both are matched by the single engine in
+/// [`textrules`](crate::textrules). Separate types, and separate tables, so
+/// that a rule written for a bank's messages is never quietly applied to a
+/// receipt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocumentExtractionRule {
+    pub id: Uuid,
+    /// What the user calls this rule.
+    pub label: String,
+    /// Pattern the filename must match, or `None` to try every document.
+    pub filename_pattern: Option<String>,
+    /// Regex run against the text pulled out of the document.
+    pub body_regex: String,
+    /// Which capture group holds the amount. Without one the rule cannot
+    /// produce a transaction.
+    pub amount_group: Option<i64>,
+    pub merchant_group: Option<i64>,
+    pub date_group: Option<i64>,
+    pub kind_hint: Option<SmsKindHint>,
+    /// Name of the account these documents belong to.
+    pub account_hint: Option<String>,
+    /// Category to apply when the rule matches and nothing better is known.
+    pub default_category_id: Option<Uuid>,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl DocumentExtractionRule {
+    /// Borrows this rule as the matching engine wants it.
+    pub fn as_view(&self) -> crate::textrules::RuleView<'_> {
+        crate::textrules::RuleView {
+            id: self.id,
+            label: &self.label,
+            source_pattern: self.filename_pattern.as_deref(),
+            body_regex: &self.body_regex,
+            amount_group: self.amount_group,
+            merchant_group: self.merchant_group,
+            date_group: self.date_group,
+            kind_hint: self.kind_hint,
+            account_hint: self.account_hint.as_deref(),
+            default_category_id: self.default_category_id,
+            enabled: self.enabled,
+        }
+    }
+}
+
+impl SmsParseRule {
+    /// Borrows this rule as the matching engine wants it.
+    ///
+    /// The engine is shared with document extraction, and Master Prompt B's
+    /// `crates/sms_parser` is meant to come through it too, so that the
+    /// "Test rule" preview in the web app is a true preview of what the phone
+    /// will do.
+    pub fn as_view(&self) -> crate::textrules::RuleView<'_> {
+        crate::textrules::RuleView {
+            id: self.id,
+            label: &self.label,
+            source_pattern: self.sender_pattern.as_deref(),
+            body_regex: &self.body_regex,
+            amount_group: self.amount_group,
+            merchant_group: self.merchant_group,
+            date_group: self.date_group,
+            kind_hint: self.kind_hint,
+            account_hint: self.account_hint.as_deref(),
+            default_category_id: self.default_category_id,
+            enabled: self.enabled,
+        }
+    }
+}
+
 /// A monthly spending ceiling for one category.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Budget {
