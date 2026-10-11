@@ -26,6 +26,7 @@ use axum::http::header::{CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
 use myledger_core::{Document, DocumentStatus, now_timestamp};
 use myledger_db::documents as db_documents;
+use myledger_db::transactions as db_transactions;
 use serde::Serialize;
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
@@ -57,10 +58,25 @@ pub struct UploadResponse {
     pub documents: Vec<Document>,
 }
 
+/// Plain text fields the upload understands, besides the files themselves.
+#[derive(Debug, Default)]
+struct Fields {
+    /// Where the upload came from, recorded on each document.
+    source: Option<String>,
+    /// The transaction these files are receipts for, if any.
+    linked_transaction_id: Option<String>,
+}
+
 /// Accepts one or more files.
 ///
-/// Any multipart field carrying a filename is treated as a file; a plain text
-/// field named `source` records where the upload came from.
+/// Any multipart field carrying a filename is treated as a file. Two plain
+/// text fields are understood: `source`, recording where the upload came
+/// from, and `linked_transaction_id`, attaching the files to a transaction as
+/// its receipts.
+///
+/// Linking also sets that transaction's `receipt` flag. The flag is therefore
+/// never a claim the client made — it means a document really is on file,
+/// which is what the receipt indicator in the UI is reporting.
 pub async fn upload_documents(
     State(state): State<AppState>,
     multipart: Multipart,
@@ -71,25 +87,65 @@ pub async fn upload_documents(
     })?;
 
     let mut staged: Vec<Staged> = Vec::new();
-    let mut source: Option<String> = None;
+    let mut fields = Fields::default();
 
     // Files are written as they arrive, so a failure part-way through leaves
     // orphans on disk unless they are explicitly cleaned up.
-    if let Err(error) = collect_files(multipart, &data_dir, &mut staged, &mut source).await {
+    if let Err(error) = collect_files(multipart, &data_dir, &mut staged, &mut fields).await {
         discard(&staged).await;
         return Err(error);
     }
 
     if staged.is_empty() {
+        discard(&staged).await;
         return Err(ApiError::bad_request("no files in the upload"));
     }
 
-    // Applied once the whole body has been read, so that a client which sends
-    // the `source` field after its files — as curl does by default — is not
-    // quietly ignored.
-    if let Some(source) = source {
+    // Everything below is applied once the whole body has been read, so that
+    // a client which sends its plain fields after its files — as curl does by
+    // default — is not quietly ignored.
+    if let Some(source) = fields.source {
         for entry in &mut staged {
             entry.document.source = Some(source.clone());
+        }
+    }
+
+    // Resolved before anything is written to the database: a bad ID should
+    // fail the upload, not leave files linked to nothing.
+    let linked = match &fields.linked_transaction_id {
+        None => None,
+        Some(raw) => {
+            let id = match Uuid::parse_str(raw.trim()) {
+                Ok(id) => id,
+                Err(_) => {
+                    discard(&staged).await;
+                    return Err(ApiError::bad_request(format!(
+                        "linked_transaction_id {raw:?} is not a UUID"
+                    )));
+                }
+            };
+            match db_transactions::get_transaction(&state.db, id).await {
+                Ok(Some(transaction)) if transaction.deleted_at.is_none() => Some(transaction),
+                Ok(_) => {
+                    discard(&staged).await;
+                    return Err(ApiError::bad_request(format!(
+                        "no live transaction with id {id} to attach these files to"
+                    )));
+                }
+                Err(error) => {
+                    discard(&staged).await;
+                    return Err(error.into());
+                }
+            }
+        }
+    };
+
+    if let Some(transaction) = &linked {
+        for entry in &mut staged {
+            entry.document.linked_transaction_id = Some(transaction.id);
+            // A receipt that belongs to a known transaction is filed, not
+            // waiting to be sorted.
+            entry.document.status = DocumentStatus::Stored;
         }
     }
 
@@ -97,6 +153,22 @@ pub async fn upload_documents(
         if let Err(error) = db_documents::insert_document(&state.db, &entry.document).await {
             discard(&staged).await;
             return Err(error.into());
+        }
+    }
+
+    // Last, because the flag should only go true once the rows it describes
+    // are really there.
+    if let Some(mut transaction) = linked
+        && !transaction.receipt
+    {
+        transaction.receipt = true;
+        transaction.updated_at = now_timestamp();
+        if let Err(error) = db_transactions::update_transaction(&state.db, &transaction).await {
+            tracing::warn!(
+                transaction = %transaction.id,
+                error = %error,
+                "stored the receipt but could not set the transaction's receipt flag"
+            );
         }
     }
 
@@ -110,15 +182,20 @@ async fn collect_files(
     mut multipart: Multipart,
     data_dir: &FsPath,
     staged: &mut Vec<Staged>,
-    source: &mut Option<String>,
+    fields: &mut Fields,
 ) -> Result<(), ApiError> {
     while let Some(mut field) = multipart.next_field().await.map_err(multipart_error)? {
         let Some(filename) = field.file_name().map(str::to_string) else {
             // A plain form field rather than a file.
             let name = field.name().unwrap_or_default().to_string();
             let value = field.text().await.map_err(multipart_error)?;
-            if name == "source" {
-                *source = Some(value.trim().to_string()).filter(|s| !s.is_empty());
+            let value = Some(value.trim().to_string()).filter(|s| !s.is_empty());
+            match name.as_str() {
+                "source" => fields.source = value,
+                "linked_transaction_id" => fields.linked_transaction_id = value,
+                // Anything else is ignored rather than refused, so a form
+                // gaining a field doesn't break the upload.
+                _ => {}
             }
             continue;
         };

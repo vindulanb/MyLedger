@@ -8,7 +8,7 @@
 use dioxus::prelude::*;
 
 use crate::Route;
-use crate::components::Toast;
+use crate::components::{AddEntryForm, Toast};
 use crate::store::{Load, Modal, Store};
 
 /// A destination, with the icon used in both navs.
@@ -88,6 +88,18 @@ pub fn Shell() -> Element {
     // scope being torn down — which is what happens if the login screen starts
     // the fetch and is then replaced by this.
     use_hook(move || store.refresh());
+
+    // And for the same reason it owns saving the period. The selector is on
+    // every page, so a request it started itself would be cancelled by the
+    // user navigating — which left the selection stuck as pending and the
+    // whole control disabled. Here the task belongs to the shell and survives
+    // the navigation that caused it.
+    use_effect(move || {
+        let Some(period) = *store.pending_period.read() else {
+            return;
+        };
+        spawn(async move { store.apply_period(period).await });
+    });
 
     rsx! {
         div { class: "shell",
@@ -231,15 +243,9 @@ fn ModalHost() -> Element {
         return rsx! {};
     };
 
-    let (title, blurb) = match modal {
-        Modal::AddEntry => (
-            "Add entry",
-            "Recording a transaction by hand arrives with the Transactions screen.",
-        ),
-        Modal::Import => (
-            "Import",
-            "CSV statement import arrives with the Import step.",
-        ),
+    let title = match modal {
+        Modal::AddEntry => "Add entry",
+        Modal::Import => "Import",
     };
 
     rsx! {
@@ -266,7 +272,14 @@ fn ModalHost() -> Element {
                     }
                 }
                 div { class: "modal-body",
-                    p { class: "muted", "{blurb}" }
+                    match modal {
+                        Modal::AddEntry => rsx! {
+                            AddEntryForm { on_done: move |_| store.close_modal() }
+                        },
+                        Modal::Import => rsx! {
+                            p { class: "muted", "CSV statement import arrives with the import step." }
+                        },
+                    }
                 }
             }
         }

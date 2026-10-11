@@ -5,9 +5,11 @@
 //! two screens drifting into two slightly different versions of the same
 //! control.
 
+mod add_entry;
 mod charts;
 mod period;
 
+pub use add_entry::AddEntryForm;
 pub use charts::{CashFlowChart, SpendingDonut};
 pub use period::{PeriodSelector, period_blurb};
 

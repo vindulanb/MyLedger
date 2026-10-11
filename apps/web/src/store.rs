@@ -8,6 +8,7 @@
 
 use dioxus::prelude::*;
 use myledger_core::{Period, PreferencesRequest, StateResponse};
+use uuid::Uuid;
 
 use crate::api;
 
@@ -76,6 +77,10 @@ pub struct Store {
     /// way once the server answers: on success the refreshed ledger carries
     /// the new value, and on failure dropping it *is* the revert.
     pub pending_period: Signal<Option<Period>>,
+    /// True while a mutating call is in flight, so a screen can disable the
+    /// control that started it instead of letting a second click race the
+    /// first.
+    pub saving: Signal<bool>,
 }
 
 impl Store {
@@ -88,6 +93,7 @@ impl Store {
             modal: Signal::new(None),
             notice: Signal::new(None),
             pending_period: Signal::new(None),
+            saving: Signal::new(false),
         })
     }
 
@@ -200,34 +206,179 @@ impl Store {
             .unwrap_or(Period::AllTime)
     }
 
-    /// Changes the period, saving it to the server.
+    /// Records that the user picked a period.
     ///
-    /// Optimistic: the new value shows immediately, and a failure puts the
-    /// old one back and says why, rather than leaving the screen claiming a
-    /// period the database doesn't have.
+    /// Deliberately does no I/O and spawns nothing. The selector is rendered
+    /// by each page, so a task started here would belong to that page's scope
+    /// and be cancelled the moment the user clicked a nav link — leaving
+    /// `pending_period` set and the selector disabled for good. The shell
+    /// watches this signal and does the saving, because it outlives every
+    /// page inside it.
     pub fn set_period(self, period: Period) {
         let mut store = self;
         if store.period() == period {
             return;
         }
         store.pending_period.set(Some(period));
+    }
 
-        spawn(async move {
-            let request =
-                PreferencesRequest { selected_period: Some(period), ..Default::default() };
-            match api::put_preferences(&request).await {
-                Ok(_) => {
-                    // Refetch before clearing, so the selector never flickers
-                    // back through the old value on its way to the new one.
-                    store.load_ledger().await;
-                    store.pending_period.set(None);
-                }
-                Err(failure) => {
-                    store.pending_period.set(None);
-                    store.fail(failure);
-                }
+    /// Saves the pending period. Called only by the shell.
+    ///
+    /// Optimistic from the user's side: the new value is already on screen,
+    /// and a failure drops it — which *is* the revert — and says why, rather
+    /// than leaving the page claiming a period the database doesn't have.
+    pub async fn apply_period(mut self, period: Period) {
+        let request = PreferencesRequest { selected_period: Some(period), ..Default::default() };
+        match api::put_preferences(&request).await {
+            Ok(_) => {
+                // Refetch before clearing, so the selector never flickers
+                // back through the old value on its way to the new one.
+                self.load_ledger().await;
+                self.pending_period.set(None);
             }
-        });
+            Err(failure) => {
+                self.pending_period.set(None);
+                self.fail(failure);
+            }
+        }
+    }
+
+    /// Saves a subset of preferences, then refetches the ledger.
+    ///
+    /// The one path every screen's edits take, so that "mutate, then reload
+    /// from the database" is not something each page has to remember.
+    /// Awaitable, so a caller can close its dialog only once the save landed,
+    /// and returns whether it did.
+    pub async fn save_preferences(mut self, request: PreferencesRequest, done: &str) -> bool {
+        self.saving.set(true);
+        let outcome = api::put_preferences(&request).await;
+        self.saving.set(false);
+
+        match outcome {
+            Ok(_) => {
+                self.load_ledger().await;
+                if !done.is_empty() {
+                    self.say(done);
+                }
+                true
+            }
+            Err(failure) => {
+                self.fail(failure);
+                false
+            }
+        }
+    }
+
+    /// Re-files one transaction's category or tags.
+    ///
+    /// Not optimistic, unlike the period: an inline edit is a single cell the
+    /// user is looking at, and showing a value the database rejected — then
+    /// snapping it back — is worse than a moment's wait. The whole ledger is
+    /// refetched after, because a rule or a tag count elsewhere may now read
+    /// differently.
+    pub async fn patch_transaction(mut self, id: Uuid, patch: api::TransactionPatch) -> bool {
+        self.saving.set(true);
+        let outcome = api::patch_transaction(id, &patch).await;
+        self.saving.set(false);
+
+        match outcome {
+            Ok(_) => {
+                self.load_ledger().await;
+                true
+            }
+            Err(failure) => {
+                self.fail(failure);
+                false
+            }
+        }
+    }
+
+    /// Records a new transaction, with any receipt attached to it.
+    ///
+    /// The receipt is uploaded *after* the transaction exists, because it has
+    /// to be linked to an ID that does. A failed upload is reported but does
+    /// not undo the transaction: the entry is the thing the user came to
+    /// record, and silently discarding it to keep a file and a row in step
+    /// would lose the more important of the two.
+    pub async fn add_transaction(
+        mut self,
+        entry: api::NewTransaction,
+        receipts: Vec<api::Upload>,
+    ) -> bool {
+        self.saving.set(true);
+
+        let report = match api::create_transaction(&entry).await {
+            Ok(report) => report,
+            Err(failure) => {
+                self.saving.set(false);
+                self.fail(failure);
+                return false;
+            }
+        };
+
+        if report.inserted == 0 {
+            self.saving.set(false);
+            self.load_ledger().await;
+            // A single valid row that isn't inserted was a duplicate: its
+            // fingerprint is already taken. The server counts that separately
+            // from a rejection, and the two deserve different explanations.
+            let text = if report.duplicates > 0 {
+                "That entry is already in your ledger — same date, merchant, amount and account."
+            } else if report.rejected > 0 {
+                "The server would not accept that entry. Check the amount, merchant and date."
+            } else {
+                "The entry was not saved, and the server did not say why."
+            };
+            self.notice.set(Some(Notice { text: text.to_string(), is_error: true }));
+            return false;
+        }
+
+        let mut message = "Entry added.".to_string();
+        if !receipts.is_empty() {
+            match report.transactions.first().map(|t| t.id) {
+                Some(id) => {
+                    if let Err(failure) = api::upload_documents(&receipts, "web-upload", Some(id)).await
+                    {
+                        message = format!(
+                            "Entry added, but the receipt did not upload: {}",
+                            failure.message
+                        );
+                    } else {
+                        message = "Entry added with its receipt.".to_string();
+                    }
+                }
+                None => message = "Entry added, but the receipt could not be linked.".to_string(),
+            }
+        }
+
+        self.saving.set(false);
+        self.load_ledger().await;
+        self.say(message);
+        true
+    }
+
+    /// Removes a transaction.
+    pub async fn remove_transaction(mut self, id: Uuid) -> bool {
+        self.saving.set(true);
+        let outcome = api::delete_transaction(id).await;
+        self.saving.set(false);
+
+        match outcome {
+            Ok(()) => {
+                self.load_ledger().await;
+                self.say("Entry deleted.");
+                true
+            }
+            Err(failure) => {
+                self.fail(failure);
+                false
+            }
+        }
+    }
+
+    /// Reports a successful action.
+    pub fn say(mut self, text: impl Into<String>) {
+        self.notice.set(Some(Notice { text: text.into(), is_error: false }));
     }
 
     /// Reports a failed call.

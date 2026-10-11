@@ -93,12 +93,24 @@ impl CategorySlice {
     }
 }
 
-/// Resolves a category or account ID to a name.
+/// Resolves a category, account or tag ID to a name.
 ///
 /// The same shape the recurring detector takes, so a caller already holding a
 /// [`StateResponse`](crate::StateResponse) has nothing new to build.
+///
+/// Accounts and tags default to `None` because the dashboard's arithmetic only
+/// ever needs categories; the search in [`filter`](crate::filter) overrides
+/// all three.
 pub trait Names {
     fn category_name(&self, id: Uuid) -> Option<&str>;
+
+    fn account_name(&self, _id: Uuid) -> Option<&str> {
+        None
+    }
+
+    fn tag_name(&self, _id: Uuid) -> Option<&str> {
+        None
+    }
 }
 
 /// The whole ledger already answers this, so a caller holding one needs
@@ -106,6 +118,14 @@ pub trait Names {
 impl Names for crate::wire::StateResponse {
     fn category_name(&self, id: Uuid) -> Option<&str> {
         crate::wire::StateResponse::category_name(self, id)
+    }
+
+    fn account_name(&self, id: Uuid) -> Option<&str> {
+        crate::wire::StateResponse::account_name(self, id)
+    }
+
+    fn tag_name(&self, id: Uuid) -> Option<&str> {
+        crate::wire::StateResponse::tag_name(self, id)
     }
 }
 

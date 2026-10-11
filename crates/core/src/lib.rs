@@ -10,11 +10,13 @@
 //! - [`format`] — rendering money for display.
 //! - [`validate`] — server-side validation of untrusted input.
 //! - [`period`] — what a selected period means in dates.
+//! - [`filter`] — search and filters for the transactions list.
 //! - [`analysis`] — the totals, charts and counts the dashboard shows.
 //! - [`recurring`] — finding the repeating charges in a transaction history.
 //! - [`wire`] — the request and response shapes the API speaks in.
 
 pub mod analysis;
+pub mod filter;
 pub mod fingerprint;
 pub mod format;
 pub mod model;
@@ -24,7 +26,7 @@ pub mod validate;
 pub mod wire;
 
 pub use fingerprint::transaction_fingerprint;
-pub use format::{money, signed_money};
+pub use format::{money, parse_money, signed_money};
 pub use model::{
     Account, Budget, Cadence, Category, Document, DocumentStatus, Goal, ParseEnumError, Period,
     RecurringItem, RecurringKind, Rule, Settings, SmsKindHint, SmsParseRule, Tag, Transaction,
@@ -37,6 +39,7 @@ pub use analysis::{
     CategorySlice, MonthFlow, Names, PeriodSummary, monthly_flow, most_recent, needs_review_count,
     previous_range, spending_by_category, summarise,
 };
+pub use filter::{AccountChoice, CategoryChoice, TransactionFilter};
 pub use period::DateRange;
 pub use wire::{
     BudgetInput, ErrorResponse, GoalInput, LoginRequest, LoginResponse, MeResponse, NamedInput,

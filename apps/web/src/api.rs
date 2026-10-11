@@ -12,10 +12,11 @@
 use gloo_net::http::Request;
 use myledger_core::{
     ErrorResponse, LoginRequest, LoginResponse, MeResponse, PreferencesRequest,
-    PreferencesResponse, StateResponse,
+    PreferencesResponse, StateResponse, Transaction,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use uuid::Uuid;
 use web_sys::RequestCredentials;
 
 const API: &str = "/api/v1";
@@ -68,6 +69,151 @@ pub async fn login(username: &str, password: &str) -> ApiResult<LoginResponse> {
 /// re-points the rows that used it), and the database is canonical.
 pub async fn put_preferences(request: &PreferencesRequest) -> ApiResult<PreferencesResponse> {
     put("/preferences", request).await
+}
+
+/// One transaction as the Add-entry form sends it.
+///
+/// Mirrors the server's `NewTransactionRequest`. It is not in `core::wire`
+/// because the CSV import and the mobile app build their rows differently and
+/// this is the shape of *this* form; the fields it does send are named to
+/// match, so a rename on the server fails here loudly.
+#[derive(Debug, Clone, Serialize)]
+pub struct NewTransaction {
+    pub date: String,
+    pub merchant: String,
+    pub amount_cents: i64,
+    /// `expense` or `income`.
+    pub kind: String,
+    pub category_id: Option<Uuid>,
+    pub account_id: Option<Uuid>,
+    pub tags: Vec<Uuid>,
+    pub source: String,
+}
+
+/// What the server made of a batch of transactions.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ImportReport {
+    pub inserted: usize,
+    pub duplicates: usize,
+    pub rejected: usize,
+    /// The rows that were written, as stored.
+    pub transactions: Vec<Transaction>,
+}
+
+/// The fields a `PATCH /transactions/{id}` may carry.
+///
+/// Absent means "leave alone" and is the reason both fields are `Option`:
+/// re-filing a category must not silently clear the tags.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct TransactionPatch {
+    /// `Some(None)` clears the category; `None` leaves it as it is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category_id: Option<Option<Uuid>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<Uuid>>,
+}
+
+/// `POST /api/v1/transactions` — records one transaction.
+pub async fn create_transaction(entry: &NewTransaction) -> ApiResult<ImportReport> {
+    // The endpoint takes a single object or an array; one object is what this
+    // form has.
+    post("/transactions", entry).await
+}
+
+/// `PATCH /api/v1/transactions/{id}` — re-files a transaction.
+pub async fn patch_transaction(id: Uuid, patch: &TransactionPatch) -> ApiResult<Transaction> {
+    let request = Request::patch(&url(&format!("/transactions/{id}")))
+        .credentials(RequestCredentials::SameOrigin)
+        .json(patch)
+        .map_err(ApiFailure::offline)?;
+    send(request).await
+}
+
+/// `DELETE /api/v1/transactions/{id}`.
+pub async fn delete_transaction(id: Uuid) -> ApiResult<()> {
+    let request = Request::delete(&url(&format!("/transactions/{id}")))
+        .credentials(RequestCredentials::SameOrigin)
+        .build()
+        .map_err(ApiFailure::offline)?;
+    send_discarding(request).await
+}
+
+/// A file picked in the browser, already read into memory.
+///
+/// `Clone` because it lives in a signal, and reading a signal by calling it
+/// clones. A receipt is a few hundred kilobytes at most, so the copy is not
+/// worth the ceremony of avoiding.
+#[derive(Clone)]
+pub struct Upload {
+    pub filename: String,
+    pub mime_type: Option<String>,
+    pub bytes: Vec<u8>,
+}
+
+/// `POST /api/v1/documents` — stores files, optionally as a transaction's
+/// receipts.
+///
+/// The body is assembled here rather than handed to the browser as a
+/// `FormData`, so the field order is ours: the plain fields go first, before
+/// any bytes, which means the server has them even if a later file is
+/// refused.
+pub async fn upload_documents(
+    files: &[Upload],
+    source: &str,
+    linked_transaction_id: Option<Uuid>,
+) -> ApiResult<()> {
+    if files.is_empty() {
+        return Err(ApiFailure { status: 0, message: "No files to upload.".to_string() });
+    }
+
+    const BOUNDARY: &str = "myledger-boundary-7f3c1a9e2b";
+    let mut body: Vec<u8> = Vec::new();
+
+    let mut text_field = |name: &str, value: &str| {
+        body.extend_from_slice(format!("--{BOUNDARY}\r\n").as_bytes());
+        body.extend_from_slice(
+            format!("Content-Disposition: form-data; name=\"{name}\"\r\n\r\n").as_bytes(),
+        );
+        body.extend_from_slice(value.as_bytes());
+        body.extend_from_slice(b"\r\n");
+    };
+
+    if !source.is_empty() {
+        text_field("source", source);
+    }
+    if let Some(id) = linked_transaction_id {
+        text_field("linked_transaction_id", &id.to_string());
+    }
+
+    for (index, file) in files.iter().enumerate() {
+        let name = format!("file{index}");
+        // Quotes and newlines in a filename would break out of the header, so
+        // they are stripped rather than escaped — the server keeps its own
+        // cleaned copy of the name regardless.
+        let safe: String =
+            file.filename.chars().filter(|c| *c != '"' && *c != '\r' && *c != '\n').collect();
+        let mime = file.mime_type.as_deref().unwrap_or("application/octet-stream");
+
+        body.extend_from_slice(format!("--{BOUNDARY}\r\n").as_bytes());
+        body.extend_from_slice(
+            format!(
+                "Content-Disposition: form-data; name=\"{name}\"; filename=\"{safe}\"\r\n"
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(format!("Content-Type: {mime}\r\n\r\n").as_bytes());
+        body.extend_from_slice(&file.bytes);
+        body.extend_from_slice(b"\r\n");
+    }
+    body.extend_from_slice(format!("--{BOUNDARY}--\r\n").as_bytes());
+
+    let payload = js_sys::Uint8Array::from(body.as_slice());
+    let request = Request::post(&url("/documents"))
+        .credentials(RequestCredentials::SameOrigin)
+        .header("Content-Type", &format!("multipart/form-data; boundary={BOUNDARY}"))
+        .body(payload)
+        .map_err(ApiFailure::offline)?;
+    send_discarding(request).await
 }
 
 /// `POST /api/v1/auth/logout`.

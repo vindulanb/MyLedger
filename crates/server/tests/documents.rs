@@ -3,7 +3,7 @@
 mod common;
 
 use axum::http::StatusCode;
-use common::{Client, Part};
+use common::{Client, Part, find_named};
 use myledger_server::api::documents::{MAX_FILE_BYTES, MAX_FILES};
 use serde_json::{Value, json};
 
@@ -276,4 +276,197 @@ async fn documents_are_behind_the_same_gate_as_everything_else() {
         let reply = common::call(&app, request).await;
         assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{path} was reachable unauthenticated");
     }
+}
+
+// ---- attaching a receipt to a transaction ----------------------------------
+
+/// Records a transaction and returns its ID.
+async fn a_transaction(client: &Client) -> String {
+    let state = client.state().await;
+    let account = find_named(&state["accounts"], "Main Account");
+
+    let report = client
+        .post(
+            "/api/v1/transactions",
+            json!({
+                "date": "2026-10-04",
+                "merchant": "Teapot Emporium",
+                "amount_cents": 2345,
+                "kind": "expense",
+                "account_id": account,
+            }),
+        )
+        .await
+        .expect(StatusCode::CREATED);
+
+    report["transactions"][0]["id"].as_str().expect("an id").to_string()
+}
+
+#[tokio::test]
+async fn a_receipt_can_be_attached_to_a_transaction() {
+    let client = Client::start().await;
+    let id = a_transaction(&client).await;
+
+    let response = client
+        .upload(
+            "/api/v1/documents",
+            &[
+                Part::field("linked_transaction_id", &id),
+                Part::file("file", "receipt.pdf", "application/pdf", PDF.to_vec()),
+            ],
+        )
+        .await
+        .expect(StatusCode::CREATED);
+
+    assert_eq!(response["documents"][0]["linked_transaction_id"], id);
+    // A receipt filed against a known transaction is stored, not queued for
+    // somebody to sort out later.
+    assert_eq!(response["documents"][0]["status"], "stored");
+}
+
+#[tokio::test]
+async fn attaching_a_receipt_sets_the_transactions_receipt_flag() {
+    let client = Client::start().await;
+    let id = a_transaction(&client).await;
+
+    let before = client.state().await;
+    assert_eq!(before["transactions"][0]["receipt"], false);
+
+    client
+        .upload(
+            "/api/v1/documents",
+            &[
+                Part::field("linked_transaction_id", &id),
+                Part::file("file", "receipt.pdf", "application/pdf", PDF.to_vec()),
+            ],
+        )
+        .await
+        .expect(StatusCode::CREATED);
+
+    // The flag is what the UI's receipt indicator reads, so it has to mean
+    // "a document is really on file" rather than "a client said so".
+    let after = client.state().await;
+    assert_eq!(after["transactions"][0]["receipt"], true);
+}
+
+#[tokio::test]
+async fn the_link_applies_even_when_it_arrives_after_the_files() {
+    let client = Client::start().await;
+    let id = a_transaction(&client).await;
+
+    // Same hazard as the `source` field: a client that writes its plain
+    // fields last must still be understood.
+    let response = client
+        .upload(
+            "/api/v1/documents",
+            &[
+                Part::file("file", "receipt.pdf", "application/pdf", PDF.to_vec()),
+                Part::field("linked_transaction_id", &id),
+            ],
+        )
+        .await
+        .expect(StatusCode::CREATED);
+
+    assert_eq!(response["documents"][0]["linked_transaction_id"], id);
+    assert_eq!(client.state().await["transactions"][0]["receipt"], true);
+}
+
+#[tokio::test]
+async fn every_file_in_one_upload_is_linked() {
+    let client = Client::start().await;
+    let id = a_transaction(&client).await;
+
+    let response = client
+        .upload(
+            "/api/v1/documents",
+            &[
+                Part::field("linked_transaction_id", &id),
+                Part::file("a", "front.pdf", "application/pdf", PDF.to_vec()),
+                Part::file("b", "back.pdf", "application/pdf", PDF.to_vec()),
+            ],
+        )
+        .await
+        .expect(StatusCode::CREATED);
+
+    assert_eq!(response["uploaded"], 2);
+    for document in response["documents"].as_array().unwrap() {
+        assert_eq!(document["linked_transaction_id"], id);
+    }
+}
+
+#[tokio::test]
+async fn a_link_to_a_transaction_that_does_not_exist_is_refused() {
+    let client = Client::start().await;
+
+    let missing = uuid::Uuid::new_v4().to_string();
+    client
+        .upload(
+            "/api/v1/documents",
+            &[
+                Part::field("linked_transaction_id", &missing),
+                Part::file("file", "receipt.pdf", "application/pdf", PDF.to_vec()),
+            ],
+        )
+        .await
+        .expect(StatusCode::BAD_REQUEST);
+
+    // Refused outright rather than stored unlinked: a receipt filed against
+    // nothing is a file nobody will ever find again.
+    assert!(client.state().await["documents"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_link_that_is_not_a_uuid_is_refused() {
+    let client = Client::start().await;
+
+    client
+        .upload(
+            "/api/v1/documents",
+            &[
+                Part::field("linked_transaction_id", "not-a-uuid"),
+                Part::file("file", "receipt.pdf", "application/pdf", PDF.to_vec()),
+            ],
+        )
+        .await
+        .expect(StatusCode::BAD_REQUEST);
+
+    assert!(client.state().await["documents"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_link_to_a_deleted_transaction_is_refused() {
+    let client = Client::start().await;
+    let id = a_transaction(&client).await;
+
+    client.delete(&format!("/api/v1/transactions/{id}")).await.expect(StatusCode::OK);
+
+    client
+        .upload(
+            "/api/v1/documents",
+            &[
+                Part::field("linked_transaction_id", &id),
+                Part::file("file", "receipt.pdf", "application/pdf", PDF.to_vec()),
+            ],
+        )
+        .await
+        .expect(StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn an_unknown_plain_field_is_ignored_rather_than_refused() {
+    let client = Client::start().await;
+
+    // A form gaining a field should not break uploading.
+    let response = client
+        .upload(
+            "/api/v1/documents",
+            &[
+                Part::field("something_new", "whatever"),
+                Part::file("file", "receipt.pdf", "application/pdf", PDF.to_vec()),
+            ],
+        )
+        .await
+        .expect(StatusCode::CREATED);
+
+    assert_eq!(response["uploaded"], 1);
 }
