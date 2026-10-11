@@ -133,6 +133,13 @@ pub fn build_app(state: AppState) -> Router {
                 .delete(api::transactions::delete_transaction),
         )
         .route("/preferences", put(api::preferences::put_preferences))
+        // Its own body limit, as uploads need: a statement is bigger than
+        // JSON but much smaller than a receipt photo.
+        .route(
+            "/import/csv",
+            post(api::import::import_csv)
+                .layer(DefaultBodyLimit::max(api::import::MAX_REQUEST_BYTES)),
+        )
         .route("/recurring/suggestions", get(api::recurring::get_suggestions))
         .route("/recurring/{pattern_key}/keep", post(api::recurring::keep_suggestion))
         .route("/recurring/{pattern_key}/ignore", post(api::recurring::ignore_suggestion))

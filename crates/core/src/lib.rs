@@ -11,11 +11,13 @@
 //! - [`validate`] — server-side validation of untrusted input.
 //! - [`period`] — what a selected period means in dates.
 //! - [`filter`] — search and filters for the transactions list.
+//! - [`csv`] — reading bank and card statements.
 //! - [`analysis`] — the totals, charts and counts the dashboard shows.
 //! - [`recurring`] — finding the repeating charges in a transaction history.
 //! - [`wire`] — the request and response shapes the API speaks in.
 
 pub mod analysis;
+pub mod csv;
 pub mod filter;
 pub mod fingerprint;
 pub mod format;
@@ -39,11 +41,16 @@ pub use analysis::{
     CategorySlice, MonthFlow, Names, PeriodSummary, monthly_flow, most_recent, needs_review_count,
     previous_range, spending_by_category, summarise,
 };
+pub use csv::{
+    AmountGuess, AmountSource, CsvError, DateFormat, DateGuess, ImportRow, Mapping, Plan,
+    ReadRows, SkippedRow, Table, read_csv, read_rows,
+};
 pub use filter::{AccountChoice, CategoryChoice, TransactionFilter};
 pub use period::DateRange;
 pub use wire::{
-    BudgetInput, ErrorResponse, GoalInput, LoginRequest, LoginResponse, MeResponse, NamedInput,
-    PreferencesRequest, PreferencesResponse, RecurringItemInput, RuleInput, StateResponse,
+    BudgetInput, ErrorResponse, GoalInput, ImportColumns, ImportCsvReport, ImportOptions,
+    LoginRequest, LoginResponse, MeResponse, NamedInput, PreferencesRequest, PreferencesResponse,
+    RecurringItemInput, RuleInput, StateResponse,
 };
 pub use validate::{
     ValidatedTransaction, ValidationError, validate_amount_cents, validate_date, validate_kind,

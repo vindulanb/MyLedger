@@ -502,6 +502,12 @@ a {
   border-radius: calc(var(--radius) * 1.4);
 }
 
+/* The import dialog holds a table of the statement's columns, which needs
+ * more room than a form does. */
+.modal-wide {
+  max-width: 56rem;
+}
+
 .modal-head {
   position: sticky;
   top: 0;
@@ -1371,6 +1377,151 @@ a {
   gap: 0.5rem;
   justify-content: flex-end;
   padding-top: 0.25rem;
+}
+
+
+/* ---- CSV import -------------------------------------------------------- */
+
+.importer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.importhead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.importhead p {
+  margin: 0.15rem 0 0;
+}
+
+/* The column preview. Scrolls inside the dialog rather than widening it: a
+ * statement can have twenty columns and the dialog cannot. */
+.preview {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.preview th {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.preview td {
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-name {
+  display: block;
+  font-weight: 600;
+}
+
+/* What each column was read as. The point of the preview is that this is
+ * visible before anything is imported. */
+.preview-role {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.preview-role.is-unused {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.importok {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.875rem;
+}
+
+/* Outstanding questions. Deliberately prominent: the import button is
+ * disabled until they are answered, and the user needs to know why. */
+.importasks {
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--slice-2);
+}
+
+.importasks-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.importasks-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.importasks-list li + li {
+  margin-top: 0.25rem;
+}
+
+.mapgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.6rem 0.9rem;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+
+.importdone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.importdone-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.skipped summary {
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 550;
+  padding: 0.3rem 0;
+}
+
+.skipped-list {
+  margin: 0.4rem 0;
+  padding-left: 1.1rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  max-height: 11rem;
+  overflow-y: auto;
 }
 
 /* ---- narrow screens --------------------------------------------------- */

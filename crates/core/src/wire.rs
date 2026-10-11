@@ -263,3 +263,74 @@ pub struct PreferencesResponse {
     pub dismissed_patterns: Vec<String>,
     pub settings: Settings,
 }
+
+// ---- POST /api/v1/import/csv -------------------------------------------
+
+/// Answers to the questions a statement can raise, sent as a JSON `options`
+/// field alongside the file.
+///
+/// Every field is optional, and a tidy statement needs none of them: the web
+/// app fills in only what it had to ask the user about. `deny_unknown_fields`
+/// so a typo in an option fails loudly instead of silently changing nothing.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ImportOptions {
+    /// `iso`, `day-first`, `month-first` or `named`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_format: Option<String>,
+    /// Which way rows go when the file itself does not say: `expense` or
+    /// `income`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<String>,
+    /// Column overrides, by zero-based index.
+    #[serde(default)]
+    pub columns: ImportColumns,
+}
+
+/// Which column holds what, when the user says rather than the parser.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ImportColumns {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merchant: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amount: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub debit: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credit: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<usize>,
+}
+
+/// What an import did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportCsvReport {
+    pub inserted: usize,
+    /// Rows already in the ledger, matched by fingerprint.
+    pub duplicates: usize,
+    /// Rows the parser could not read, plus rows the server refused.
+    pub skipped: usize,
+    /// How many inserted rows ended up filed under `Needs review`.
+    pub needs_review: usize,
+    /// Total data rows in the file.
+    pub rows_in_file: usize,
+    /// Why each skipped row was skipped, capped so one bad file cannot
+    /// produce a response larger than the file itself.
+    pub skipped_detail: Vec<SkippedDetail>,
+    /// The column names as read, so a client can show what it imported from.
+    pub headers: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkippedDetail {
+    /// 1-based line in the file.
+    pub line: usize,
+    pub reason: String,
+}

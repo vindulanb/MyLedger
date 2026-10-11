@@ -11,8 +11,8 @@
 
 use gloo_net::http::Request;
 use myledger_core::{
-    ErrorResponse, LoginRequest, LoginResponse, MeResponse, PreferencesRequest,
-    PreferencesResponse, StateResponse, Transaction,
+    ErrorResponse, ImportCsvReport, ImportOptions, LoginRequest, LoginResponse, MeResponse,
+    PreferencesRequest, PreferencesResponse, StateResponse, Transaction,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -152,11 +152,6 @@ pub struct Upload {
 
 /// `POST /api/v1/documents` — stores files, optionally as a transaction's
 /// receipts.
-///
-/// The body is assembled here rather than handed to the browser as a
-/// `FormData`, so the field order is ours: the plain fields go first, before
-/// any bytes, which means the server has them even if a later file is
-/// refused.
 pub async fn upload_documents(
     files: &[Upload],
     source: &str,
@@ -166,23 +161,47 @@ pub async fn upload_documents(
         return Err(ApiFailure { status: 0, message: "No files to upload.".to_string() });
     }
 
-    const BOUNDARY: &str = "myledger-boundary-7f3c1a9e2b";
+    let id = linked_transaction_id.map(|id| id.to_string());
+    let mut fields: Vec<(&str, &str)> = Vec::new();
+    if !source.is_empty() {
+        fields.push(("source", source));
+    }
+    if let Some(id) = &id {
+        fields.push(("linked_transaction_id", id));
+    }
+
+    let body = multipart(&fields, files);
+    let request = Request::post(&url("/documents"))
+        .credentials(RequestCredentials::SameOrigin)
+        .header("Content-Type", &format!("multipart/form-data; boundary={BOUNDARY}"))
+        .body(body)
+        .map_err(ApiFailure::offline)?;
+    send_discarding(request).await
+}
+
+const BOUNDARY: &str = "myledger-boundary-7f3c1a9e2b";
+
+/// Builds a `multipart/form-data` body.
+///
+/// Assembled here rather than handed to the browser as a `FormData`, so the
+/// field order is ours: the plain fields go first, before any bytes, which
+/// means the server has them even if a later file is refused.
+fn multipart(fields: &[(&str, &str)], files: &[Upload]) -> js_sys::Uint8Array {
+    // Every line in a multipart body ends CRLF, per RFC 7578.
+    const CRLF: &[u8] = b"\r\n";
+
+    fn line(body: &mut Vec<u8>, text: &str) {
+        body.extend_from_slice(text.as_bytes());
+        body.extend_from_slice(CRLF);
+    }
+
     let mut body: Vec<u8> = Vec::new();
 
-    let mut text_field = |name: &str, value: &str| {
-        body.extend_from_slice(format!("--{BOUNDARY}\r\n").as_bytes());
-        body.extend_from_slice(
-            format!("Content-Disposition: form-data; name=\"{name}\"\r\n\r\n").as_bytes(),
-        );
-        body.extend_from_slice(value.as_bytes());
-        body.extend_from_slice(b"\r\n");
-    };
-
-    if !source.is_empty() {
-        text_field("source", source);
-    }
-    if let Some(id) = linked_transaction_id {
-        text_field("linked_transaction_id", &id.to_string());
+    for (name, value) in fields {
+        line(&mut body, &format!("--{BOUNDARY}"));
+        line(&mut body, &format!("Content-Disposition: form-data; name=\"{name}\""));
+        line(&mut body, "");
+        line(&mut body, value);
     }
 
     for (index, file) in files.iter().enumerate() {
@@ -191,29 +210,43 @@ pub async fn upload_documents(
         // they are stripped rather than escaped — the server keeps its own
         // cleaned copy of the name regardless.
         let safe: String =
-            file.filename.chars().filter(|c| *c != '"' && *c != '\r' && *c != '\n').collect();
+            file.filename.chars().filter(|c| !matches!(c, '"' | '\r' | '\n')).collect();
         let mime = file.mime_type.as_deref().unwrap_or("application/octet-stream");
 
-        body.extend_from_slice(format!("--{BOUNDARY}\r\n").as_bytes());
-        body.extend_from_slice(
-            format!(
-                "Content-Disposition: form-data; name=\"{name}\"; filename=\"{safe}\"\r\n"
-            )
-            .as_bytes(),
+        line(&mut body, &format!("--{BOUNDARY}"));
+        line(
+            &mut body,
+            &format!("Content-Disposition: form-data; name=\"{name}\"; filename=\"{safe}\""),
         );
-        body.extend_from_slice(format!("Content-Type: {mime}\r\n\r\n").as_bytes());
+        line(&mut body, &format!("Content-Type: {mime}"));
+        line(&mut body, "");
         body.extend_from_slice(&file.bytes);
-        body.extend_from_slice(b"\r\n");
+        body.extend_from_slice(CRLF);
     }
-    body.extend_from_slice(format!("--{BOUNDARY}--\r\n").as_bytes());
+    line(&mut body, &format!("--{BOUNDARY}--"));
 
-    let payload = js_sys::Uint8Array::from(body.as_slice());
-    let request = Request::post(&url("/documents"))
+    js_sys::Uint8Array::from(body.as_slice())
+}
+
+/// `POST /api/v1/import/csv` — imports a bank or card statement.
+///
+/// The options carry only the answers the user had to give; a tidy statement
+/// sends an empty object. The server parses the bytes itself and never trusts
+/// whatever this client made of them.
+pub async fn import_csv(
+    file: &Upload,
+    options: &ImportOptions,
+) -> ApiResult<ImportCsvReport> {
+    let encoded = serde_json::to_string(options)
+        .map_err(|e| ApiFailure { status: 0, message: format!("Could not encode options: {e}") })?;
+
+    let body = multipart(&[("options", encoded.as_str())], std::slice::from_ref(file));
+    let request = Request::post(&url("/import/csv"))
         .credentials(RequestCredentials::SameOrigin)
         .header("Content-Type", &format!("multipart/form-data; boundary={BOUNDARY}"))
-        .body(payload)
+        .body(body)
         .map_err(ApiFailure::offline)?;
-    send_discarding(request).await
+    send(request).await
 }
 
 /// `POST /api/v1/auth/logout`.

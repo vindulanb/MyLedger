@@ -376,6 +376,15 @@ impl Store {
         }
     }
 
+    /// Refetches the ledger and waits for it.
+    ///
+    /// For a caller that has changed the database by some route of its own —
+    /// the CSV import — and needs the screens behind it to catch up before it
+    /// reports what happened.
+    pub async fn reload(self) {
+        self.load_ledger().await;
+    }
+
     /// Reports a successful action.
     pub fn say(mut self, text: impl Into<String>) {
         self.notice.set(Some(Notice { text: text.into(), is_error: false }));

@@ -8,7 +8,7 @@
 use dioxus::prelude::*;
 
 use crate::Route;
-use crate::components::{AddEntryForm, Toast};
+use crate::components::{AddEntryForm, ImportForm, Toast};
 use crate::store::{Load, Modal, Store};
 
 /// A destination, with the icon used in both navs.
@@ -254,7 +254,12 @@ fn ModalHost() -> Element {
             onclick: move |_| store.close_modal(),
 
             div {
-                class: "modal",
+                // The import dialog shows a column preview, so it gets the
+                // wider frame.
+                class: match modal {
+                    Modal::Import => "modal modal-wide",
+                    _ => "modal",
+                },
                 role: "dialog",
                 "aria-modal": "true",
                 "aria-label": "{title}",
@@ -277,7 +282,7 @@ fn ModalHost() -> Element {
                             AddEntryForm { on_done: move |_| store.close_modal() }
                         },
                         Modal::Import => rsx! {
-                            p { class: "muted", "CSV statement import arrives with the import step." }
+                            ImportForm { on_done: move |_| store.close_modal() }
                         },
                     }
                 }

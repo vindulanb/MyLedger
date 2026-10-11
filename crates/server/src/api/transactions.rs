@@ -135,7 +135,7 @@ pub async fn create_transactions(
         ImportReport { inserted: 0, duplicates: 0, rejected: 0, results: Vec::new(), transactions: Vec::new() };
 
     for (index, item) in items.into_iter().enumerate() {
-        match insert_one(&state, &lookups, &rules, item).await {
+        match insert_one(&state, &lookups, &rules, item, None).await {
             Ok(Outcome::Inserted(transaction)) => {
                 report.inserted += 1;
                 report.results.push(ItemResult::Inserted { index, id: transaction.id });
@@ -166,7 +166,7 @@ pub async fn create_transactions(
     Ok((status, Json(report)).into_response())
 }
 
-enum Outcome {
+pub(crate) enum Outcome {
     /// Boxed: a `Transaction` dwarfs the other variant, and this is returned
     /// once per row of an import that may be thousands long.
     Inserted(Box<Transaction>),
@@ -174,11 +174,21 @@ enum Outcome {
 }
 
 /// Validates, de-duplicates and writes one row.
-async fn insert_one(
+///
+/// `pub(crate)` so the CSV import goes through this exact path rather than a
+/// parallel one of its own. Duplicate detection, rule application and the
+/// order they happen in are the whole point of having one.
+///
+/// `fallback_category` is applied only if the row still has no category once
+/// the rules have run — which is why it is a parameter rather than something
+/// the caller pre-fills: setting the category up front would stop every rule
+/// from ever matching an imported row.
+pub(crate) async fn insert_one(
     state: &AppState,
     lookups: &Lookups,
     rules: &[Rule],
     raw: Value,
+    fallback_category: Option<Uuid>,
 ) -> Result<Outcome, ApiError> {
     let request: NewTransactionRequest = serde_json::from_value(raw)
         .map_err(|e| ApiError::bad_request(format!("could not read the transaction: {e}")))?;
@@ -240,6 +250,11 @@ async fn insert_one(
     // which feeds the fingerprint — but running rules before the duplicate
     // check would mean a rule could decide what "the same purchase" is.
     apply_rules(rules, &mut transaction);
+
+    // And only now, so a rule always gets first refusal on an imported row.
+    if transaction.category_id.is_none() {
+        transaction.category_id = fallback_category;
+    }
 
     match db_transactions::insert_transaction(&state.db, &transaction).await {
         Ok(()) => Ok(Outcome::Inserted(Box::new(transaction))),
