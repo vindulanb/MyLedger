@@ -38,6 +38,9 @@ use crate::AppState;
 use crate::api::{Lookups, clean_date, clean_name, clean_recurring_fields, explicit_option};
 use crate::error::ApiError;
 use crate::extract::{ApiJson, optional_json};
+// The response and the keep body live in `core::wire`: the web app reads one
+// and builds the other, so one definition keeps the two sides in step.
+pub use myledger_core::wire::{KeepSuggestionRequest as KeepRequest, SuggestionsResponse};
 
 /// How far back detection reads.
 ///
@@ -47,20 +50,6 @@ use crate::extract::{ApiJson, optional_json};
 pub const LOOKBACK_MONTHS: u32 = 36;
 
 // ---- suggestions -----------------------------------------------------------
-
-/// The suggestions worth showing, and why the list might be short.
-#[derive(Debug, Serialize)]
-pub struct SuggestionsResponse {
-    pub suggestions: Vec<RecurringSuggestion>,
-    /// Patterns detection found but is not offering, because the user already
-    /// answered for them. Reported so a UI can say "3 hidden" rather than
-    /// leaving the user wondering where Netflix went.
-    pub hidden_as_kept: usize,
-    pub hidden_as_ignored: usize,
-    /// The date detection treated as today. Everything here — the cadence
-    /// windows, the staleness cutoff — is relative to it.
-    pub as_of: String,
-}
 
 /// Proposes repeating charges the user hasn't yet ruled on.
 pub async fn get_suggestions(
@@ -138,24 +127,6 @@ async fn confirmed_keys(db: &Db) -> Result<HashSet<String>, ApiError> {
 /// Anything left out is taken from what detection worked out. `kind` is
 /// included because a person may know better than the hint lists — a "gym"
 /// that is really a loan repayment.
-#[derive(Debug, Default, Deserialize)]
-pub struct KeepRequest {
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub category_id: Option<Uuid>,
-    #[serde(default)]
-    pub account_id: Option<Uuid>,
-    #[serde(default)]
-    pub amount_cents: Option<i64>,
-    #[serde(default)]
-    pub cadence: Option<Cadence>,
-    #[serde(default)]
-    pub next_date: Option<String>,
-    #[serde(default)]
-    pub kind: Option<RecurringKind>,
-}
-
 /// Accepts a suggestion, turning it into a confirmed item.
 ///
 /// The suggestion is recomputed rather than taken on trust from the request:

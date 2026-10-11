@@ -11,9 +11,10 @@
 
 use gloo_net::http::Request;
 use myledger_core::{
-    DocumentExtractionRule, ErrorResponse, ExtractionResponse, ImportCsvReport, ImportOptions,
-    LoginRequest, LoginResponse, MeResponse, PreferencesRequest, PreferencesResponse,
-    StateResponse, StoredExtractionResponse, Transaction,
+    Cadence, DocumentExtractionRule, ErrorResponse, ExtractionResponse, ImportCsvReport,
+    ImportOptions, KeepSuggestionRequest, LoginRequest, LoginResponse, MeResponse,
+    PreferencesRequest, PreferencesResponse, RecurringItem, RecurringKind, StateResponse,
+    StoredExtractionResponse, SuggestionsResponse, Transaction,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -360,6 +361,116 @@ pub async fn delete_extraction_rule(id: Uuid) -> ApiResult<()> {
         .build()
         .map_err(ApiFailure::offline)?;
     send_discarding(request).await
+}
+
+/// `GET /api/v1/recurring/suggestions` — repeating charges not yet ruled on.
+pub async fn recurring_suggestions() -> ApiResult<SuggestionsResponse> {
+    get("/recurring/suggestions").await
+}
+
+/// `POST /api/v1/recurring/{pattern_key}/keep` — confirms a suggestion.
+///
+/// The body is usually empty: accepting a suggestion as detected is the
+/// normal case, and the server recomputes it rather than trusting a client
+/// about whether something is a bill or a subscription.
+pub async fn keep_suggestion(
+    pattern_key: &str,
+    request: &KeepSuggestionRequest,
+) -> ApiResult<()> {
+    let path = format!("/recurring/{}/keep", encode(pattern_key));
+    let built = Request::post(&url(&path))
+        .credentials(RequestCredentials::SameOrigin)
+        .json(request)
+        .map_err(ApiFailure::offline)?;
+    send_discarding(built).await
+}
+
+/// `POST /api/v1/recurring/{pattern_key}/ignore` — hides a merchant for good.
+pub async fn ignore_suggestion(pattern_key: &str) -> ApiResult<()> {
+    let path = format!("/recurring/{}/ignore", encode(pattern_key));
+    let built = Request::post(&url(&path))
+        .credentials(RequestCredentials::SameOrigin)
+        .build()
+        .map_err(ApiFailure::offline)?;
+    send_discarding(built).await
+}
+
+/// A recurring item or subscription, as the form sends it.
+#[derive(Debug, Clone, Serialize)]
+pub struct NewRecurringItem {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category_id: Option<Uuid>,
+    pub amount_cents: i64,
+    pub cadence: Cadence,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<Uuid>,
+    pub kind: RecurringKind,
+    pub active: bool,
+}
+
+/// `POST /api/v1/recurring-items`.
+pub async fn create_recurring_item(item: &NewRecurringItem) -> ApiResult<RecurringItem> {
+    post("/recurring-items", item).await
+}
+
+/// A change to a confirmed item. Absent fields are left alone.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct RecurringItemPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category_id: Option<Option<Uuid>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount_cents: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cadence: Option<Cadence>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_date: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<Option<Uuid>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<RecurringKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active: Option<bool>,
+}
+
+/// `PATCH /api/v1/recurring-items/{id}`.
+pub async fn patch_recurring_item(id: Uuid, patch: &RecurringItemPatch) -> ApiResult<()> {
+    let request = Request::patch(&url(&format!("/recurring-items/{id}")))
+        .credentials(RequestCredentials::SameOrigin)
+        .json(patch)
+        .map_err(ApiFailure::offline)?;
+    send_discarding(request).await
+}
+
+/// `DELETE /api/v1/recurring-items/{id}`.
+pub async fn delete_recurring_item(id: Uuid) -> ApiResult<()> {
+    let request = Request::delete(&url(&format!("/recurring-items/{id}")))
+        .credentials(RequestCredentials::SameOrigin)
+        .build()
+        .map_err(ApiFailure::offline)?;
+    send_discarding(request).await
+}
+
+/// Percent-encodes a path segment.
+///
+/// A pattern key is a normalised merchant name, so it is lowercase words and
+/// spaces — but a space in a path is not something to send raw, and a merchant
+/// could contain anything the normaliser kept.
+fn encode(segment: &str) -> String {
+    let mut out = String::with_capacity(segment.len());
+    for byte in segment.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*byte as char)
+            }
+            other => out.push_str(&format!("%{other:02X}")),
+        }
+    }
+    out
 }
 
 /// `POST /api/v1/auth/logout`.

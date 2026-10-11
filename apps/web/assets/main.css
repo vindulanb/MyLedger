@@ -1672,6 +1672,150 @@ a {
   background: var(--surface-sunken);
 }
 
+
+/* ---- recurring detection ----------------------------------------------- */
+
+.detection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.detection p {
+  margin: 0;
+}
+
+.detection-state {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+}
+
+/* A status light. Steady when detection is idle and has run, pulsing while
+ * it runs — the one place in the app where motion carries meaning. */
+.dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.dot.is-on {
+  background: var(--accent);
+}
+
+.dot.is-busy {
+  background: var(--slice-2);
+  animation: dot-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Someone who has asked for less motion gets a steady light instead. */
+@media (prefers-reduced-motion: reduce) {
+  .dot.is-busy {
+    animation: none;
+  }
+}
+
+/* ---- suggestions ------------------------------------------------------- */
+
+.suggestions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 0.75rem;
+}
+
+.suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.suggestion-head {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.suggestion-name {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.suggestion-meta {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.suggestion p {
+  margin: 0;
+}
+
+.suggestion-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.badge-confidence-high {
+  border-color: var(--positive);
+  color: var(--positive);
+}
+
+.badge-confidence-likely {
+  border-color: var(--slice-2);
+  color: var(--slice-2);
+}
+
+/* A tighter fact grid, for inside a card rather than across a page. */
+.factgrid-tight {
+  gap: 0.5rem 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+}
+
+.factgrid-tight .fact-value.small-value {
+  font-size: 0.9375rem;
+}
+
+/* ---- confirmed items --------------------------------------------------- */
+
+.itemrow {
+  border-bottom: 1px solid var(--border);
+}
+
+.itemrow:last-child {
+  border-bottom: none;
+}
+
+.itemrow .minirow {
+  border-bottom: none;
+}
+
+.itemrow .minirow-merchant {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
 /* ---- narrow screens --------------------------------------------------- */
 
 @media (max-width: 900px) {
@@ -1801,6 +1945,12 @@ a {
 
   .rowactions {
     justify-content: flex-start;
+  }
+
+  /* The suggestion cards go to one column rather than squeezing their fact
+   * grids into something unreadable. */
+  .suggestions {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .manuallink-row {

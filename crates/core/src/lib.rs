@@ -56,7 +56,8 @@ pub use period::DateRange;
 pub use wire::{
     BudgetInput, ErrorResponse, ExtractionResponse, GoalInput, ImportColumns, ImportCsvReport,
     ImportOptions, LoginRequest, LoginResponse, MeResponse, NamedInput, PreferencesRequest,
-    PreferencesResponse, RecurringItemInput, RuleInput, StateResponse, StoredExtractionResponse,
+    KeepSuggestionRequest, PreferencesResponse, RecurringItemInput, RuleInput, StateResponse,
+    StoredExtractionResponse, SuggestionsResponse,
 };
 pub use validate::{
     ValidatedTransaction, ValidationError, validate_amount_cents, validate_date, validate_kind,

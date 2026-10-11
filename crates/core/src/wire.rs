@@ -377,3 +377,47 @@ pub struct StoredExtractionResponse {
     pub outcome: String,
     pub candidates: Vec<crate::textrules::Candidate>,
 }
+
+// ---- recurring detection -----------------------------------------------
+
+/// Reply to `GET /api/v1/recurring/suggestions`.
+///
+/// Patterns the user has already ruled on are left out, and counted instead,
+/// so a client can say "3 hidden" rather than leaving someone wondering where
+/// a subscription went. That filtering is also what keeps a combined monthly
+/// total from double-counting: a confirmed item never appears here as well.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SuggestionsResponse {
+    pub suggestions: Vec<crate::recurring::RecurringSuggestion>,
+    /// Found, but already confirmed as a recurring item.
+    pub hidden_as_kept: usize,
+    /// Found, but the user has dismissed this merchant.
+    pub hidden_as_ignored: usize,
+    /// The date detection treated as today. Every window and cutoff here is
+    /// relative to it.
+    pub as_of: String,
+}
+
+/// Body of `POST /api/v1/recurring/{pattern_key}/keep`.
+///
+/// Every field is optional: sending nothing accepts the suggestion exactly as
+/// detected, which is the usual case. The server recomputes the suggestion
+/// rather than trusting these, so a client cannot assert that a loan
+/// repayment is a subscription.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct KeepSuggestionRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category_id: Option<uuid::Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<uuid::Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amount_cents: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cadence: Option<crate::model::Cadence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_date: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<crate::model::RecurringKind>,
+}

@@ -9,20 +9,18 @@ mod budgets;
 mod dashboard;
 mod documents;
 mod goals;
-mod recurring;
+mod repeating;
 mod rules;
 mod settings;
-mod subscriptions;
 mod transactions;
 
 pub use budgets::Budgets;
 pub use dashboard::Dashboard;
 pub use documents::Documents;
 pub use goals::Goals;
-pub use recurring::Recurring;
+pub use repeating::{Recurring, Subscriptions};
 pub use rules::RulesAndTags;
 pub use settings::Settings;
-pub use subscriptions::Subscriptions;
 pub use transactions::Transactions;
 
 use dioxus::prelude::*;
