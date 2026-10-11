@@ -2,6 +2,12 @@
 resolver = "3"
 members = ["crates/core", "crates/db", "crates/server"]
 
+# The web app is deliberately not a member. It only ever compiles for
+# wasm32-unknown-unknown, so including it would make `cargo build --workspace`
+# try to build a WASM-only renderer for the host and fail. It carries its own
+# lockfile and depends on `crates/core` by path.
+exclude = ["apps/web"]
+
 [workspace.package]
 version = "0.1.0"
 edition = "2024"

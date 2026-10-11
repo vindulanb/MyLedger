@@ -6,7 +6,7 @@ use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::http::header::SET_COOKIE;
 use axum::response::IntoResponse;
-use myledger_core::timestamp_after;
+use myledger_core::{LoginRequest, LoginResponse, MeResponse, timestamp_after};
 use myledger_db::auth as db_auth;
 use serde::{Deserialize, Serialize};
 
@@ -19,18 +19,8 @@ use crate::config::SESSION_TTL;
 use crate::error::ApiError;
 use crate::extract::{ApiJson, optional_json};
 
-#[derive(Debug, Deserialize)]
-pub struct LoginRequest {
-    pub username: String,
-    pub password: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct LoginResponse {
-    pub username: String,
-    /// When the session will lapse if left unused.
-    pub expires_at: String,
-}
+// `LoginRequest`, `LoginResponse` and `MeResponse` live in
+// `myledger_core::wire`, because the web and mobile apps speak them too.
 
 /// Exchanges a username and password for a session cookie.
 pub async fn login(
@@ -174,15 +164,6 @@ pub async fn list_device_tokens(
     ))
 }
 
-#[derive(Debug, Serialize)]
-pub struct MeResponse {
-    pub username: String,
-    /// Which kind of credential this request used: `session` or `device_token`.
-    pub authenticated_via: &'static str,
-    /// The device's label, when signed in as one.
-    pub device_label: Option<String>,
-}
-
 /// Reports who the caller is. The smallest possible protected route, and what
 /// a client calls on startup to find out whether it is still signed in.
 pub async fn me(identity: Identity) -> Json<MeResponse> {
@@ -191,7 +172,7 @@ pub async fn me(identity: Identity) -> Json<MeResponse> {
         Credential::Session { .. } => None,
     };
     Json(MeResponse {
-        authenticated_via: identity.credential.kind(),
+        authenticated_via: identity.credential.kind().to_string(),
         username: identity.username,
         device_label,
     })

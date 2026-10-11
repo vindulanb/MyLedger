@@ -1,0 +1,11 @@
+[application]
+name = "myledger-web"
+
+[web.app]
+title = "MyLedger"
+
+[web.watcher]
+# The API is served by the Axum backend, not by dx. During `dx serve`, proxy
+# API calls through so the dev server and the real backend look like one
+# origin — which the session cookie depends on.
+index_on_404 = true

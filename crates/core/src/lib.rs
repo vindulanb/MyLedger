@@ -7,15 +7,20 @@
 //!
 //! - [`model`] — the domain records and their wire/database tokens.
 //! - [`fingerprint`] — duplicate detection.
+//! - [`format`] — rendering money for display.
 //! - [`validate`] — server-side validation of untrusted input.
 //! - [`recurring`] — finding the repeating charges in a transaction history.
+//! - [`wire`] — the request and response shapes the API speaks in.
 
 pub mod fingerprint;
+pub mod format;
 pub mod model;
 pub mod recurring;
 pub mod validate;
+pub mod wire;
 
 pub use fingerprint::transaction_fingerprint;
+pub use format::{money, signed_money};
 pub use model::{
     Account, Budget, Cadence, Category, Document, DocumentStatus, Goal, ParseEnumError, Period,
     RecurringItem, RecurringKind, Rule, Settings, SmsKindHint, SmsParseRule, Tag, Transaction,
@@ -23,6 +28,9 @@ pub use model::{
 };
 pub use recurring::{
     Confidence, NameLookup, RecurringSuggestion, detect_recurring, normalize_merchant,
+};
+pub use wire::{
+    ErrorResponse, LoginRequest, LoginResponse, MeResponse, StateResponse,
 };
 pub use validate::{
     ValidatedTransaction, ValidationError, validate_amount_cents, validate_date, validate_kind,

@@ -1,0 +1,8 @@
+# The `wasm32-unknown-unknown` target has no OS to ask for randomness, so
+# getrandom requires an explicit backend. `wasm_js` routes it through the
+# browser's crypto API. This is needed because the shared `core` crate pulls in
+# `uuid`; nothing in the web app generates UUIDs itself.
+#
+# Scoped to the wasm target, so native builds of the server are untouched.
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

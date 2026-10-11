@@ -26,6 +26,9 @@ pub fn test_config(db_path: &std::path::Path) -> Config {
     Config {
         db_path: db_path.to_path_buf(),
         data_dir: db_path.parent().unwrap().join("documents"),
+        // No built UI in tests: the server should still serve the API, and
+        // answer non-API paths with the "not built" page.
+        web_dir: db_path.parent().unwrap().join("web-dist"),
         bind: "127.0.0.1:0".parse().unwrap(),
         cookie_secure: false,
     }
@@ -85,6 +88,18 @@ pub async fn call(app: &Router, request: Request<Body>) -> Reply {
         })
     };
     Reply { status, headers, body }
+}
+
+/// Sends a request without insisting the reply is JSON.
+///
+/// Needed for the pages the server serves to a browser — the web app itself,
+/// and the stand-in page shown when it hasn't been built.
+pub async fn call_raw(app: &Router, request: Request<Body>) -> RawReply {
+    let response = app.clone().oneshot(request).await.expect("router should not fail");
+    let status = response.status();
+    let headers = response.headers().clone();
+    let bytes = response.into_body().collect().await.expect("read body").to_bytes();
+    RawReply { status, headers, bytes: bytes.to_vec() }
 }
 
 pub fn request_with_json(method: &str, path: &str, body: &Value) -> Request<Body> {

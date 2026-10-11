@@ -11,6 +11,15 @@ use std::time::Duration;
 /// Where to listen if `MYLEDGER_BIND` says nothing.
 const DEFAULT_BIND: &str = "127.0.0.1:8787";
 
+/// Where `dx build --release` leaves the web app.
+///
+/// Not a pretty path, but it is the one the Dioxus CLI actually writes to and
+/// it takes no `--out-dir` flag. Defaulting to it means `dx build --release`
+/// followed by `cargo run -p server` works with nothing configured;
+/// `MYLEDGER_WEB_DIR` overrides it for a debug build or a deployment that
+/// copies the files elsewhere.
+const DEFAULT_WEB_DIR: &str = "apps/web/target/dx/web/release/web/public";
+
 /// How long a browser session lasts without use. Sliding: every authenticated
 /// request pushes it back out.
 pub const SESSION_TTL: Duration = Duration::from_secs(30 * 24 * 60 * 60);
@@ -25,6 +34,13 @@ pub struct Config {
     pub db_path: PathBuf,
     /// Directory uploaded documents are written to.
     pub data_dir: PathBuf,
+    /// Directory holding the built web app — the output of `dx build`.
+    ///
+    /// Served as static files, with unknown paths falling back to
+    /// `index.html` so the single-page app can own its own routing. If the
+    /// directory has no `index.html`, the server still runs the API and
+    /// explains how to build the UI instead of serving a bare 404.
+    pub web_dir: PathBuf,
     /// Address to listen on.
     pub bind: SocketAddr,
     /// Whether the session cookie is marked `Secure`.
@@ -50,6 +66,10 @@ impl Config {
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("data/documents"));
 
+        let web_dir = env::var("MYLEDGER_WEB_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(DEFAULT_WEB_DIR));
+
         let bind_raw = env::var("MYLEDGER_BIND").unwrap_or_else(|_| DEFAULT_BIND.to_string());
         let bind: SocketAddr = bind_raw
             .parse()
@@ -61,7 +81,7 @@ impl Config {
             Err(_) => false,
         };
 
-        Ok(Self { db_path, data_dir, bind, cookie_secure })
+        Ok(Self { db_path, data_dir, web_dir, bind, cookie_secure })
     }
 }
 

@@ -1,7 +1,11 @@
-# Rust build output
-/target/
+# Rust build output. Unanchored, so it also covers apps/web/target — the web
+# app has its own target directory, being outside the workspace.
+target/
 **/*.rs.bk
 *.pdb
+
+# Built web app (the output of `dx build`)
+/apps/web/dist/
 
 # Environment / secrets
 .env

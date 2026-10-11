@@ -1,0 +1,40 @@
+[package]
+name = "web"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+publish = false
+
+# Not a workspace member — see the comment in the root Cargo.toml. `core` is
+# therefore a path dependency rather than an inherited workspace one.
+
+[dependencies]
+core = { path = "../../crates/core" }
+dioxus = { version = "0.7", features = ["router", "web"] }
+gloo-net = { version = "0.6", default-features = false, features = ["http", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# `js` points uuid at the browser's crypto for randomness; without it, uuid
+# refuses to compile for wasm32 at all.
+uuid = { version = "1", features = ["js", "serde"] }
+
+# WASM plumbing for the shared `core` crate. Neither of these is used directly
+# here; they exist so that core's `chrono` and `uuid` work in a browser:
+#   * chrono needs `wasmbind` or `Utc::now()` has no clock to read.
+#   * getrandom needs its `wasm_js` backend, selected by the feature here and
+#     the `--cfg getrandom_backend` flag in `.cargo/config.toml`.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "wasmbind"] }
+getrandom = { version = "0.4", features = ["wasm_js"] }
+# Only for `RequestCredentials`, so the same-origin intent is explicit at the
+# call site rather than relying on the fetch default.
+web-sys = { version = "0.3", features = ["RequestCredentials"] }
+
+[profile.release]
+# A smaller .wasm matters more than compile time for a single-user app that is
+# loaded over a home network.
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

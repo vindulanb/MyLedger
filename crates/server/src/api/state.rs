@@ -11,11 +11,7 @@
 
 use axum::Json;
 use axum::extract::State;
-use myledger_core::{
-    Account, Budget, Category, Document, Goal, RecurringItem, Rule, Settings, SmsParseRule, Tag,
-    Transaction,
-};
-use myledger_core::now_timestamp;
+use myledger_core::{StateResponse, now_timestamp};
 use myledger_db::lookups::{accounts, categories, tags};
 use myledger_db::{
     budgets, dismissed, documents as db_documents, goals, recurring_items, rules, seed, settings,
@@ -38,35 +34,9 @@ pub const TRANSACTION_LIMIT: i64 = 5_000;
 /// Most recent documents returned. Metadata only.
 pub const DOCUMENT_LIMIT: i64 = 100;
 
-/// The whole ledger.
-#[derive(Debug, Serialize)]
-pub struct StateResponse {
-    /// Newest first, capped at [`TRANSACTION_LIMIT`].
-    pub transactions: Vec<Transaction>,
-    /// Whether the cap was hit, so a client knows it is looking at a window
-    /// rather than the whole history.
-    pub transactions_truncated: bool,
-
-    /// Lookups include soft-deleted rows, each carrying its `deleted_at`.
-    /// Filter on `deleted_at === null` to build a picker; keep the rest so old
-    /// transactions still resolve to a name.
-    pub categories: Vec<Category>,
-    pub accounts: Vec<Account>,
-    pub tags: Vec<Tag>,
-
-    pub rules: Vec<Rule>,
-    pub sms_parse_rules: Vec<SmsParseRule>,
-    pub budgets: Vec<Budget>,
-    pub goals: Vec<Goal>,
-    pub recurring_items: Vec<RecurringItem>,
-    /// Normalised merchants whose suggestions the user has dismissed.
-    pub dismissed_patterns: Vec<String>,
-
-    /// Metadata only — never bytes, never on-disk paths.
-    pub documents: Vec<Document>,
-
-    pub settings: Settings,
-}
+// `StateResponse` itself lives in `myledger_core::wire`: the web and mobile
+// apps deserialise it, so a field renamed here has to stop compiling there
+// rather than quietly arriving as `None`.
 
 /// Reads the whole ledger.
 pub async fn get_state(State(state): State<AppState>) -> Result<Json<StateResponse>, ApiError> {

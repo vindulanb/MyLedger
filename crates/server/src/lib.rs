@@ -19,15 +19,16 @@ use std::path::Path;
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::DefaultBodyLimit;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{Html, IntoResponse};
 use axum::routing::{get, patch, post, put};
 use axum::{Router, middleware};
-use myledger_core::now_timestamp;
+use myledger_core::{APP_NAME, now_timestamp};
 use myledger_db::auth as db_auth;
 use myledger_db::{Db, DbError, seed};
 use serde::Serialize;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 use crate::auth::MIN_PASSWORD_LENGTH;
@@ -173,12 +174,77 @@ pub fn build_app(state: AppState) -> Router {
     // signing in requires being signed in.
     let public = Router::new().route("/auth/login", post(auth::routes::login));
 
-    Router::new()
-        .nest("/api/v1", public.merge(protected))
-        .route("/health", get(health))
-        .fallback(not_found)
-        .layer(TraceLayer::new_for_http())
-        .with_state(state)
+    // The API keeps its own JSON 404, so an unknown `/api/v1/...` path is
+    // never answered with the single-page app's HTML — which would leave a
+    // client parsing a document where it expected an error.
+    let api = public.merge(protected).fallback(not_found);
+
+    let base = Router::new().nest("/api/v1", api).route("/health", get(health));
+
+    // Unknown paths fall back to `index.html` rather than 404ing, because the
+    // single-page app owns its own routing: a browser reloading
+    // `/transactions` has to be handed the app, which then reads the URL for
+    // itself. `/api/v1/...` is unaffected — the API set its own fallback above.
+    let web_dir = state.config.web_dir.clone();
+    let index = web_dir.join("index.html");
+    let with_ui = if index.is_file() {
+        tracing::info!(path = %web_dir.display(), "serving the web app");
+        base.fallback_service(ServeDir::new(&web_dir).fallback(ServeFile::new(index)))
+    } else {
+        // Not an error: the API is perfectly usable on its own, and a paired
+        // phone never needs these files at all.
+        tracing::warn!(
+            path = %web_dir.display(),
+            "no built web app found; the API is running but there is no UI to serve"
+        );
+        base.fallback(web_app_missing)
+    };
+
+    with_ui.layer(TraceLayer::new_for_http()).with_state(state)
+}
+
+/// Stands in for the UI when it hasn't been built.
+///
+/// Plain HTML with the actual command in it, because whoever sees this is in a
+/// browser expecting an app and a JSON error would tell them nothing.
+async fn web_app_missing(State(state): State<AppState>) -> impl IntoResponse {
+    // A raw string so the markup reads as markup, with placeholders filled by
+    // `replace` rather than `format!` — which would need every CSS brace in
+    // here doubled. The placeholders are underscore-delimited so that neither
+    // can be a substring of real text on the page: plain `WEB_DIR` would also
+    // match inside `MYLEDGER_WEB_DIR`.
+    const PAGE: &str = r#"<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__APP__ — interface not built</title>
+<style>
+  body { font: 16px/1.6 system-ui, sans-serif; max-width: 40rem;
+         margin: 4rem auto; padding: 0 1.5rem; color: #1c1917; background: #fafaf9 }
+  code, pre { font-family: ui-monospace, monospace }
+  pre { background: #f5f5f4; padding: .9rem 1.1rem; border-radius: .5rem; overflow-x: auto }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e7e5e4; background: #1c1917 }
+    pre { background: #292524 }
+  }
+</style>
+</head>
+<body>
+<h1>__APP__ is running</h1>
+<p>The API is up, but the web interface hasn't been built yet. Build it with:</p>
+<pre>cd apps/web &amp;&amp; dx build --release</pre>
+<p>Then point <code>MYLEDGER_WEB_DIR</code> at the output directory and restart.
+It is currently looking in <code>__DIR__</code>.</p>
+<p>The API itself is available under <code>/api/v1</code>.</p>
+</body>
+</html>
+"#;
+
+    Html(
+        PAGE.replace("__APP__", APP_NAME)
+            .replace("__DIR__", &state.config.web_dir.display().to_string()),
+    )
 }
 
 #[derive(Debug, Serialize)]
