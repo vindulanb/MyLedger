@@ -124,6 +124,117 @@ pub struct MeResponse {
     pub device_label: Option<String>,
 }
 
+// ---- DELETE /api/v1/state ----------------------------------------------
+
+/// The exact phrase `DELETE /state` requires.
+///
+/// Spelled out in full, in capitals, and with no shorter alias: this is not a
+/// request anyone should be able to make by accident, mistype their way into,
+/// or trigger by replaying a URL. It lives here rather than in the server
+/// because a client has to send the identical string, and two copies of a
+/// magic phrase are two things that can drift apart.
+pub const WIPE_CONFIRMATION: &str = "DELETE ALL MYLEDGER DATA";
+
+/// The body of a wipe request.
+///
+/// `deny_unknown_fields` so that a request carrying anything beyond the
+/// confirmation is refused rather than half-understood.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WipeRequest {
+    pub confirm: String,
+}
+
+impl WipeRequest {
+    /// The one request this endpoint accepts.
+    pub fn confirmed() -> Self {
+        Self { confirm: WIPE_CONFIRMATION.to_string() }
+    }
+}
+
+/// What the wipe removed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeletedCounts {
+    pub transactions: u64,
+    pub transaction_tags: u64,
+    pub tags: u64,
+    pub documents: u64,
+    pub document_extractions: u64,
+    pub rules: u64,
+    pub sms_parse_rules: u64,
+    pub document_extraction_rules: u64,
+    pub budgets: u64,
+    pub goals: u64,
+    pub recurring_items: u64,
+    pub dismissed_patterns: u64,
+    pub total: u64,
+}
+
+/// What survived, and why the user is still signed in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeptSummary {
+    /// Categories and accounts are a curated list, not a record of money, so
+    /// they are left as the user arranged them.
+    pub categories: i64,
+    pub accounts: i64,
+    /// Always true: wiping your data does not sign you out or unpair a device.
+    pub signed_in: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WipeResponse {
+    pub wiped: bool,
+    pub deleted: DeletedCounts,
+    /// Files actually removed from the document store.
+    pub document_files_removed: usize,
+    /// Starter names put back, if the lookup tables had been emptied.
+    pub starter_categories_restored: usize,
+    pub starter_accounts_restored: usize,
+    pub kept: KeptSummary,
+    /// When this wipe happened. The mobile app reads it so that re-scanning the
+    /// inbox doesn't drag back everything the wipe just removed.
+    pub wipe_reset_at: String,
+}
+
+// ---- device pairing ----------------------------------------------------
+
+/// Body of `POST /api/v1/auth/device-tokens`.
+///
+/// The label is optional: a token is usable without one, and the list of
+/// paired devices simply shows it as unnamed.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CreateDeviceTokenRequest {
+    /// What to call this device in the paired-devices list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+/// Reply to `POST /api/v1/auth/device-tokens`.
+///
+/// The one response in the API that carries a secret. Only its hash is
+/// stored, so this is the single moment the raw token exists anywhere the
+/// user can read it — which is why `warning` is part of the contract rather
+/// than something each client words for itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateDeviceTokenResponse {
+    /// The raw token. Shown once, here, and never recoverable.
+    pub token: String,
+    pub label: Option<String>,
+    pub created_at: String,
+    pub warning: String,
+}
+
+/// One paired device, as the settings screen lists it.
+///
+/// No token, not even a prefix of one: a device is identified by what the
+/// user called it and when it last checked in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeviceTokenSummary {
+    pub label: Option<String>,
+    pub created_at: String,
+    pub last_used_at: Option<String>,
+}
+
 /// The body every API failure is rendered as.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorResponse {

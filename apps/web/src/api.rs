@@ -11,10 +11,11 @@
 
 use gloo_net::http::Request;
 use myledger_core::{
-    Cadence, DocumentExtractionRule, ErrorResponse, ExtractionResponse, ImportCsvReport,
-    ImportOptions, KeepSuggestionRequest, LoginRequest, LoginResponse, MeResponse,
-    PreferencesRequest, PreferencesResponse, RecurringItem, RecurringKind, SmsParseRule,
-    StateResponse, StoredExtractionResponse, SuggestionsResponse, Transaction,
+    Cadence, CreateDeviceTokenRequest, CreateDeviceTokenResponse, DeviceTokenSummary,
+    DocumentExtractionRule, ErrorResponse, ExtractionResponse, ImportCsvReport, ImportOptions,
+    KeepSuggestionRequest, LoginRequest, LoginResponse, MeResponse, PreferencesRequest,
+    PreferencesResponse, RecurringItem, RecurringKind, SmsParseRule, StateResponse,
+    StoredExtractionResponse, SuggestionsResponse, Transaction, WipeRequest, WipeResponse,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -534,6 +535,41 @@ pub async fn delete_sms_rule(id: Uuid) -> ApiResult<()> {
         .build()
         .map_err(ApiFailure::offline)?;
     send_discarding(request).await
+}
+
+// ---- device pairing ----------------------------------------------------
+
+/// `GET /api/v1/auth/device-tokens` — the paired devices.
+///
+/// Labels and dates only. The server has no way to return a token even if
+/// this asked for one: only the hash is stored.
+pub async fn device_tokens() -> ApiResult<Vec<DeviceTokenSummary>> {
+    get("/auth/device-tokens").await
+}
+
+/// `POST /api/v1/auth/device-tokens` — mints a pairing token.
+///
+/// The reply is the only place the raw token ever exists outside the phone
+/// that will hold it, which is why the caller shows it immediately and keeps
+/// it nowhere.
+pub async fn create_device_token(label: Option<String>) -> ApiResult<CreateDeviceTokenResponse> {
+    post("/auth/device-tokens", &CreateDeviceTokenRequest { label }).await
+}
+
+// ---- the wipe ----------------------------------------------------------
+
+/// `DELETE /api/v1/state` — erases every financial record.
+///
+/// Takes no confirmation argument on purpose. The phrase the server checks
+/// for is fixed, and the gate the *user* passes is the typed `DELETE` in the
+/// danger zone; letting a caller here pass a phrase would make the guard look
+/// like a parameter rather than a constant.
+pub async fn wipe_state() -> ApiResult<WipeResponse> {
+    let request = Request::delete(&url("/state"))
+        .credentials(RequestCredentials::SameOrigin)
+        .json(&WipeRequest::confirmed())
+        .map_err(ApiFailure::offline)?;
+    send(request).await
 }
 
 /// `POST /api/v1/auth/logout`.

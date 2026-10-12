@@ -17,7 +17,6 @@ use myledger_db::{
     budgets, dismissed, documents as db_documents, goals, recurring_items, rules, seed, settings,
     extraction as db_extraction, sms_rules, transactions, wipe as db_wipe,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::api::documents;
@@ -68,66 +67,14 @@ pub async fn get_state(State(state): State<AppState>) -> Result<Json<StateRespon
     }))
 }
 
-/// The exact phrase `DELETE /state` requires.
-///
-/// Spelled out in full, in capitals, and with no shorter alias: this is not a
-/// request anyone should be able to make by accident, mistype their way into,
-/// or trigger by replaying a URL.
-pub const WIPE_CONFIRMATION: &str = "DELETE ALL MYLEDGER DATA";
-
-/// The body of a wipe request.
-///
-/// `deny_unknown_fields` so that a request carrying anything beyond the
-/// confirmation is refused rather than half-understood.
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct WipeRequest {
-    pub confirm: String,
-}
-
-/// What the wipe removed.
-#[derive(Debug, Serialize)]
-pub struct DeletedCounts {
-    pub transactions: u64,
-    pub transaction_tags: u64,
-    pub tags: u64,
-    pub documents: u64,
-    pub document_extractions: u64,
-    pub rules: u64,
-    pub sms_parse_rules: u64,
-    pub document_extraction_rules: u64,
-    pub budgets: u64,
-    pub goals: u64,
-    pub recurring_items: u64,
-    pub dismissed_patterns: u64,
-    pub total: u64,
-}
-
-/// What survived, and why the user is still signed in.
-#[derive(Debug, Serialize)]
-pub struct KeptSummary {
-    /// Categories and accounts are a curated list, not a record of money, so
-    /// they are left as the user arranged them.
-    pub categories: i64,
-    pub accounts: i64,
-    /// Always true: wiping your data does not sign you out or unpair a device.
-    pub signed_in: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct WipeResponse {
-    pub wiped: bool,
-    pub deleted: DeletedCounts,
-    /// Files actually removed from the document store.
-    pub document_files_removed: usize,
-    /// Starter names put back, if the lookup tables had been emptied.
-    pub starter_categories_restored: usize,
-    pub starter_accounts_restored: usize,
-    pub kept: KeptSummary,
-    /// When this wipe happened. The mobile app reads it so that re-scanning the
-    /// inbox doesn't drag back everything the wipe just removed.
-    pub wipe_reset_at: String,
-}
+// The wipe's confirmation phrase and its request and response shapes live in
+// `myledger_core::wire`: the web app has to send exactly the phrase this
+// endpoint checks for, and a copy of that string on each side is precisely
+// the sort of thing that drifts. Re-exported here so the route and its tests
+// still name them where they are used.
+pub use myledger_core::wire::{
+    DeletedCounts, KeptSummary, WIPE_CONFIRMATION, WipeRequest, WipeResponse,
+};
 
 /// Erases every financial record.
 ///

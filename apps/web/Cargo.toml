@@ -26,9 +26,11 @@ uuid = { version = "1", features = ["js", "serde"] }
 #     the `--cfg getrandom_backend` flag in `.cargo/config.toml`.
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "wasmbind"] }
 getrandom = { version = "0.4", features = ["wasm_js"] }
-# Only for `RequestCredentials`, so the same-origin intent is explicit at the
-# call site rather than relying on the fetch default.
-web-sys = { version = "0.3", features = ["RequestCredentials"] }
+# `RequestCredentials` so the same-origin intent is explicit at the call site
+# rather than relying on the fetch default; `Window` and `Location` so the
+# pairing QR code can carry the address this page was actually served from,
+# which is the one a phone on the same network needs.
+web-sys = { version = "0.3", features = ["Location", "RequestCredentials", "Window"] }
 # A multipart upload body has to cross into JavaScript as a typed array.
 js-sys = "0.3"
 

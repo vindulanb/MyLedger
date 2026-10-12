@@ -6,9 +6,12 @@ use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::http::header::SET_COOKIE;
 use axum::response::IntoResponse;
-use myledger_core::{LoginRequest, LoginResponse, MeResponse, timestamp_after};
+use myledger_core::{
+    CreateDeviceTokenRequest, CreateDeviceTokenResponse, DeviceTokenSummary, LoginRequest,
+    LoginResponse, MeResponse, timestamp_after,
+};
 use myledger_db::auth as db_auth;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::AppState;
 use crate::auth::{
@@ -19,7 +22,7 @@ use crate::config::SESSION_TTL;
 use crate::error::ApiError;
 use crate::extract::{ApiJson, optional_json};
 
-// `LoginRequest`, `LoginResponse` and `MeResponse` live in
+// The login, identity and device-pairing shapes all live in
 // `myledger_core::wire`, because the web and mobile apps speak them too.
 
 /// Exchanges a username and password for a session cookie.
@@ -88,23 +91,6 @@ pub async fn logout(
     Ok((headers, Json(LogoutResponse { signed_out })))
 }
 
-#[derive(Debug, Default, Deserialize)]
-pub struct CreateDeviceTokenRequest {
-    /// What to call this device in the paired-devices list.
-    #[serde(default)]
-    pub label: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CreateDeviceTokenResponse {
-    /// The raw token. Shown once, here, and never recoverable — only its hash
-    /// is stored.
-    pub token: String,
-    pub label: Option<String>,
-    pub created_at: String,
-    pub warning: &'static str,
-}
-
 /// Mints a pairing token for a new device.
 ///
 /// Deliberately session-only. A phone holding a device token must not be able
@@ -136,15 +122,9 @@ pub async fn create_device_token(
         token,
         label: record.label,
         created_at: record.created_at,
-        warning: "This token is shown once and cannot be recovered. Store it now.",
+        warning: "This token is shown once and cannot be recovered. Store it now."
+            .to_string(),
     }))
-}
-
-#[derive(Debug, Serialize)]
-pub struct DeviceTokenSummary {
-    pub label: Option<String>,
-    pub created_at: String,
-    pub last_used_at: Option<String>,
 }
 
 /// Lists paired devices — without, of course, their tokens.

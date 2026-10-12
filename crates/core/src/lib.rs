@@ -16,6 +16,7 @@
 //! - [`analysis`] — the totals, charts and counts the dashboard shows.
 //! - [`budgets`] — budget and goal progress.
 //! - [`recurring`] — finding the repeating charges in a transaction history.
+//! - [`qr`] — rendering a pairing payload as a scannable QR code.
 //! - [`wire`] — the request and response shapes the API speaks in.
 
 pub mod analysis;
@@ -26,6 +27,7 @@ pub mod fingerprint;
 pub mod format;
 pub mod model;
 pub mod period;
+pub mod qr;
 pub mod recurring;
 pub mod textrules;
 pub mod validate;
@@ -56,11 +58,14 @@ pub use textrules::{
 };
 pub use budgets::{BudgetHealth, BudgetProgress, GoalProgress};
 pub use period::DateRange;
+pub use qr::{QrSvg, pairing_payload};
 pub use wire::{
-    BudgetInput, ErrorResponse, ExtractionResponse, GoalInput, ImportColumns, ImportCsvReport,
-    ImportOptions, LoginRequest, LoginResponse, MeResponse, NamedInput, PreferencesRequest,
-    KeepSuggestionRequest, PreferencesResponse, RecurringItemInput, RuleInput, StateResponse,
-    StoredExtractionResponse, SuggestionsResponse, TagUsage,
+    BudgetInput, CreateDeviceTokenRequest, CreateDeviceTokenResponse, DeletedCounts,
+    DeviceTokenSummary, ErrorResponse, ExtractionResponse, GoalInput, ImportColumns,
+    ImportCsvReport, ImportOptions, KeepSuggestionRequest, KeptSummary, LoginRequest,
+    LoginResponse, MeResponse, NamedInput, PreferencesRequest, PreferencesResponse,
+    RecurringItemInput, RuleInput, StateResponse, StoredExtractionResponse, SuggestionsResponse,
+    TagUsage, WIPE_CONFIRMATION, WipeRequest, WipeResponse,
 };
 pub use validate::{
     ValidatedTransaction, ValidationError, validate_amount_cents, validate_date, validate_kind,

@@ -2074,6 +2074,137 @@ textarea.field-input {
   line-height: 1.5;
 }
 
+
+/* ---- settings ---------------------------------------------------------- */
+
+/* A heading inside a card, under its title. */
+.subheading {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+
+/* An explanatory list, set as prose rather than as data. */
+.plainlist {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.plainlist li + li {
+  margin-top: 0.35rem;
+}
+
+/* The live assets-minus-liabilities figure, which reads from the fields
+ * rather than from what was last saved. */
+.netpreview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.85rem 1rem;
+  margin-top: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+/* The one place in the app that shows a secret. Bordered like the danger
+ * zone, because it carries the same kind of weight: it will not come back. */
+.tokenbox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  margin: 0.5rem 0 1rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.tokenlayout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.qrframe {
+  flex: 0 0 auto;
+  width: 11rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #ffffff;
+}
+
+/* The SVG sizes to its container; the white plate above stays white in dark
+ * mode on purpose, since a scanner needs the contrast the code was drawn
+ * with. */
+.qrframe svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qrframe-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 8rem;
+  text-align: center;
+  background: var(--surface-sunken);
+}
+
+.tokendetail {
+  flex: 1 1 16rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.tokendetail .field-label {
+  margin-top: 0.35rem;
+}
+
+/* Breaks anywhere, because a token is one long unspaced string and a phone
+ * screen is narrow. */
+.tokenvalue {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.3rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  user-select: all;
+}
+
+/* The danger zone announces itself before you read a word of it. */
+.dangerzone {
+  border-color: var(--danger);
+}
+
+.dangerzone .card-title {
+  color: var(--danger);
+}
+
+.button-danger {
+  background: var(--danger);
+  color: #ffffff;
+  border-color: var(--danger);
+}
+
+.button-danger:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .button-danger {
+    color: #3b1a1a;
+  }
+}
+
 /* ---- narrow screens --------------------------------------------------- */
 
 @media (max-width: 900px) {

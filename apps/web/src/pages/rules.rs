@@ -20,7 +20,7 @@ use myledger_core::{
 use uuid::Uuid;
 
 use crate::api;
-use crate::components::EmptyState;
+use crate::components::{DeleteTagConfirm, EmptyState, ListKind, usage_words};
 use crate::store::{Load, Store, today};
 
 #[component]
@@ -407,7 +407,7 @@ fn TagManager(state: StateResponse) -> Element {
             }
             error.set(None);
 
-            let mut wanted = surviving_tags(&state, None);
+            let mut wanted = ListKind::Tags.surviving(&state, None);
             wanted.push(NamedInput::new_named(&name));
             spawn(async move {
                 let request = PreferencesRequest { tags: Some(wanted), ..Default::default() };
@@ -511,117 +511,6 @@ fn TagManager(state: StateResponse) -> Element {
             }
         }
     }
-}
-
-/// Deleting a tag, and the choice about history.
-///
-/// The spec asks before stripping a removed tag from past transactions, and
-/// the default is to keep them: an old entry that keeps its label keeps its
-/// meaning, and the destructive option cannot be undone.
-#[component]
-fn DeleteTagConfirm(
-    state: StateResponse,
-    tag_id: Uuid,
-    tag_name: String,
-    uses: i64,
-    on_done: EventHandler<()>,
-) -> Element {
-    let store = Store::use_store();
-    let busy = *store.saving.read();
-    let mut strip = use_signal(|| false);
-
-    let remove = move |_| {
-        let wanted = surviving_tags(&state, Some(tag_id));
-        let also_strip = strip();
-        let done = if also_strip {
-            "Tag deleted and taken off your history."
-        } else {
-            "Tag deleted. Past transactions keep it."
-        };
-        spawn(async move {
-            let request = PreferencesRequest {
-                tags: Some(wanted),
-                strip_removed_tags: Some(also_strip),
-                ..Default::default()
-            };
-            if store.save_preferences(request, done).await {
-                on_done.call(());
-            }
-        });
-    };
-
-    rsx! {
-        div { class: "confirmbox", role: "group", "aria-label": "Delete the tag {tag_name}",
-            p { class: "confirmbox-title", "Delete “{tag_name}”?" }
-            p { class: "muted small",
-                if uses == 0 {
-                    "Nothing is tagged with it, so nothing else changes."
-                } else if uses == 1 {
-                    "It stops being offered. One transaction already carries it."
-                } else {
-                    "It stops being offered. {uses} transactions already carry it."
-                }
-            }
-
-            if uses > 0 {
-                label { class: "checkline",
-                    input {
-                        r#type: "checkbox",
-                        checked: strip(),
-                        disabled: busy,
-                        onchange: move |event| strip.set(event.checked()),
-                    }
-                    span {
-                        "Also take it off those "
-                        if uses == 1 { "transaction" } else { "{uses} transactions" }
-                    }
-                }
-                if strip() {
-                    p { class: "formerror", role: "alert",
-                        "This cannot be undone. The tag will be gone from your history as well as from the list."
-                    }
-                } else {
-                    p { class: "muted small",
-                        "Left unticked, past transactions keep showing the tag — which is why they still make sense when you read them back."
-                    }
-                }
-            }
-
-            div { class: "formactions",
-                button {
-                    class: "button button-quiet",
-                    r#type: "button",
-                    disabled: busy,
-                    onclick: move |_| on_done.call(()),
-                    "Keep it"
-                }
-                button {
-                    class: "button button-primary",
-                    r#type: "button",
-                    disabled: busy,
-                    onclick: remove,
-                    "Delete tag"
-                }
-            }
-        }
-    }
-}
-
-fn usage_words(uses: i64) -> String {
-    match uses {
-        0 => "Not used yet".to_string(),
-        1 => "On 1 transaction".to_string(),
-        many => format!("On {many} transactions"),
-    }
-}
-
-/// Every tag being kept, as the sync endpoint wants them.
-fn surviving_tags(state: &StateResponse, without: Option<Uuid>) -> Vec<NamedInput> {
-    state
-        .live_tags()
-        .filter(|tag| Some(tag.id) != without)
-        .map(|tag| NamedInput::existing(tag.id, &tag.name))
-        .collect()
 }
 
 // ---- SMS parsing rules -----------------------------------------------------
