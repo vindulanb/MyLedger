@@ -1816,6 +1816,168 @@ a {
   white-space: normal;
 }
 
+
+/* ---- budgets and goals ------------------------------------------------- */
+
+.pagehead-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.budgetlist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.budgetcard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.budget-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.budget-remaining {
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.budget-remaining.is-over {
+  color: var(--danger);
+}
+
+.budget-remaining.is-near {
+  color: var(--slice-2);
+}
+
+.budget-remaining.is-fine {
+  color: var(--positive);
+}
+
+/* A progress bar. The fill width is clamped at 100%; the percentage beside
+ * it is not, so going well over the limit still reads as what it is. */
+.bar {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 200ms ease-out;
+}
+
+.bar-fill.is-over {
+  background: var(--danger);
+}
+
+.bar-fill.is-near {
+  background: var(--slice-2);
+}
+
+.bar-fill.is-fine {
+  background: var(--positive);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill {
+    transition: none;
+  }
+}
+
+.goalnote {
+  margin: 0;
+  padding-top: 0.15rem;
+}
+
+/* ---- budget health ring ------------------------------------------------ */
+
+.healthcard {
+  display: grid;
+  grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.ringwrap {
+  display: grid;
+  place-items: center;
+}
+
+.ring {
+  width: 100%;
+  height: auto;
+}
+
+.ring-track {
+  stroke: var(--surface-sunken);
+  stroke-width: 14;
+}
+
+.ring-arc {
+  stroke: var(--accent);
+  stroke-width: 14;
+  stroke-linecap: round;
+  transition: stroke-dasharray 250ms ease-out;
+}
+
+.ring-is-over .ring-arc {
+  stroke: var(--danger);
+}
+
+.ring-is-near .ring-arc {
+  stroke: var(--slice-2);
+}
+
+.ring-is-fine .ring-arc {
+  stroke: var(--positive);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-arc {
+    transition: none;
+  }
+}
+
+.ring-value {
+  fill: var(--text);
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.ring-caption {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+
+.healthfacts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.healthfacts p {
+  margin: 0;
+}
+
 /* ---- narrow screens --------------------------------------------------- */
 
 @media (max-width: 900px) {
@@ -1951,6 +2113,24 @@ a {
    * grids into something unreadable. */
   .suggestions {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .budgetlist {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The ring sits above its figures rather than beside them. */
+  .healthcard {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+
+  .ring {
+    max-width: 10rem;
+  }
+
+  .healthfacts {
+    width: 100%;
   }
 
   .manuallink-row {

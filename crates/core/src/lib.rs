@@ -14,10 +14,12 @@
 //! - [`csv`] — reading bank and card statements.
 //! - [`textrules`] — pulling a transaction out of text, by rule.
 //! - [`analysis`] — the totals, charts and counts the dashboard shows.
+//! - [`budgets`] — budget and goal progress.
 //! - [`recurring`] — finding the repeating charges in a transaction history.
 //! - [`wire`] — the request and response shapes the API speaks in.
 
 pub mod analysis;
+pub mod budgets;
 pub mod csv;
 pub mod filter;
 pub mod fingerprint;
@@ -52,6 +54,7 @@ pub use filter::{AccountChoice, CategoryChoice, TransactionFilter};
 pub use textrules::{
     Candidate, Context, MatchOutcome, RuleProblem, RuleView, check_rule, match_text,
 };
+pub use budgets::{BudgetHealth, BudgetProgress, GoalProgress};
 pub use period::DateRange;
 pub use wire::{
     BudgetInput, ErrorResponse, ExtractionResponse, GoalInput, ImportColumns, ImportCsvReport,
