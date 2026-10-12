@@ -2336,6 +2336,29 @@ textarea.field-input {
     justify-content: flex-start;
   }
 
+  /* The only row that pairs a block of text with action buttons and does not
+   * otherwise wrap. On a phone the buttons belong under the text rather than
+   * squeezing it to nothing. */
+  .minirow {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .minirow-main {
+    flex: 1 1 100%;
+  }
+
+  /* The pairing token and its QR code stack rather than sitting side by
+   * side, which at this width would leave the token four characters wide. */
+  .tokenlayout {
+    gap: 0.9rem;
+  }
+
+  .qrframe {
+    width: 100%;
+    max-width: 13rem;
+  }
+
   /* The suggestion cards go to one column rather than squeezing their fact
    * grids into something unreadable. */
   .suggestions {

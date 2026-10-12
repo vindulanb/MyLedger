@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>{app_title}</title>
+        <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta charset="UTF-8">
+        <meta name="color-scheme" content="light dark">
+        <!--
+          A custom template, replacing the one dioxus-cli generates, for one
+          reason: the stylesheet is a hashed asset that Dioxus injects from
+          WASM once the app boots, so for the first few hundred milliseconds
+          the page has no styles at all. On a dark-mode screen that is a full
+          white flash, and the wordmark lands wherever the browser's defaults
+          put it.
+
+          The rules below are the handful needed to hold the page still until
+          the real stylesheet arrives: the background, the text colour and the
+          centred wordmark. They are inline rather than a second file because
+          a second file would be a second request, which is the problem rather
+          than the fix. Everything else lives in assets/main.css, which
+          overrides these as soon as it loads.
+        -->
+        <style>
+            :root { color-scheme: light dark; --boot-bg: #fafaf9; --boot-text: #78716c }
+            @media (prefers-color-scheme: dark) {
+                :root { --boot-bg: #1c1917; --boot-text: #a8a29e }
+            }
+            html, body {
+                margin: 0;
+                background: var(--boot-bg);
+                color: var(--boot-text);
+                font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+            }
+            /* Matches `.splash` in main.css, so the wordmark does not jump
+               when the real stylesheet takes over. */
+            #main:empty::before {
+                content: "MyLedger";
+                display: grid;
+                place-items: center;
+                min-height: 100vh;
+                font-size: 1.35rem;
+                font-weight: 600;
+                letter-spacing: -0.02em;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="main"></div>
+    </body>
+</html>

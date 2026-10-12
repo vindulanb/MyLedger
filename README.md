@@ -26,7 +26,7 @@ import, uploaded documents or parsed SMS messages.
 | `crates/db`      | lib  | SQLite schema, migrations, seed routine and the query layer           |
 | `crates/server`  | bin  | Axum JSON API (`myledger-server`), authentication, document storage   |
 | `apps/mobile`    | —    | Mobile client — built later by Master Prompt B                        |
-| `apps/web`       | —    | Web client — built later by Master Prompt C                           |
+| `apps/web`       | app  | Dioxus web client, compiled to WASM and served by `crates/server`     |
 
 The `core` and `db` packages expose library targets named `myledger_core` and
 `myledger_db`, so a package called `core` cannot shadow the standard library's
@@ -64,16 +64,32 @@ database, so restarting the server signs nobody out.
 | ------------------------ | ---------------------------------------------------------- |
 | `MYLEDGER_DB_PATH`       | SQLite database file (default `data/myledger.sqlite`)       |
 | `MYLEDGER_DATA_DIR`      | Directory for uploaded documents (default `data/documents`) |
+| `MYLEDGER_WEB_DIR`       | Built web app (default: the `dx build --release` output)    |
 | `MYLEDGER_BIND`          | Listen address (default `127.0.0.1:8787`)                   |
 | `MYLEDGER_COOKIE_SECURE` | Mark session cookies `Secure`. Turn on when serving HTTPS.  |
 | `MYLEDGER_LOG`           | Log filter (default `info`)                                 |
 
+## The web app
+
+Built, and served by this backend. From the repository root:
+
+```sh
+cd apps/web && dx build --release
+```
+
+The server finds the output on its own; `MYLEDGER_WEB_DIR` overrides it. See
+[`apps/web/README.md`](apps/web/README.md) for why that crate is outside the
+workspace and how it is laid out.
+
 ## Build order
 
-The project is built in three phases. This repository currently contains
-phase A only.
+The project is built in three phases.
 
 1. **Master Prompt A — Shared Foundation**: workspace, domain logic, database,
-   backend API.
-2. **Master Prompt B — Mobile app**, on top of the same API.
-3. **Master Prompt C — Web app**, on top of the same API.
+   backend API. ✅ Done.
+2. **Master Prompt B — Mobile app**, on top of the same API. Not started.
+3. **Master Prompt C — Web app**, on top of the same API. ✅ Done.
+
+[`HANDOFF.md`](HANDOFF.md) covers running it, exposing it beyond the house,
+how duplicate and recurring detection actually work, what the document
+pipeline can and cannot do, and how to pair a phone when you start Prompt B.
