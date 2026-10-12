@@ -1978,6 +1978,102 @@ a {
   margin: 0;
 }
 
+
+/* ---- rules and tags ---------------------------------------------------- */
+
+/* A rule reads as a sentence: When … then … . The keywords are set apart so
+ * the shape is scannable down a list of them. */
+.rulewhen {
+  display: block;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.rulekeyword {
+  display: inline-block;
+  min-width: 2.75rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ruletext {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.25rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+
+/* A standing explanation, not a transient alert: used for the note saying
+ * the SMS rules are written here and run on the phone. */
+.notice {
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--slice-1);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.notice p + p {
+  margin-top: 0.3rem;
+}
+
+/* Deleting a tag asks first, and the question is where the answer is. */
+.confirmbox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  margin: 0.5rem 0 0.75rem;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+}
+
+.confirmbox p {
+  margin: 0;
+}
+
+.confirmbox-title {
+  font-weight: 650;
+}
+
+.confirmbox .formactions {
+  padding-top: 0.25rem;
+}
+
+/* The Test rule box. */
+.testbox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  margin: 0.5rem 0 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.testbox .importok,
+.testbox .importasks {
+  margin: 0;
+}
+
+textarea.field-input {
+  resize: vertical;
+  min-height: 4.5rem;
+  line-height: 1.5;
+}
+
 /* ---- narrow screens --------------------------------------------------- */
 
 @media (max-width: 900px) {

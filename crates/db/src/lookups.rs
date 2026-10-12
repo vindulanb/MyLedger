@@ -232,6 +232,50 @@ pub mod tags {
         soft_delete = soft_delete_tag,
         count = count_tags,
     }
+
+    /// How many live transactions carry each tag.
+    ///
+    /// Counted in SQL rather than over the transactions a client happens to hold:
+    /// `GET /state` caps the transactions it returns, so a count derived from that
+    /// list would quietly understate a tag on a long history. Only live
+    /// transactions count — a tag is not "in use" by something the user deleted.
+    pub async fn tag_usage(db: &Db) -> Result<Vec<(Uuid, i64)>, DbError> {
+        let rows: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT tt.tag_id, COUNT(*) FROM transaction_tags tt \
+             JOIN transactions t ON t.id = tt.transaction_id \
+             WHERE t.deleted_at IS NULL \
+             GROUP BY tt.tag_id",
+        )
+        .fetch_all(db.pool())
+        .await?;
+
+        rows.into_iter()
+            .map(|(id, count)| Ok((crate::convert::uuid_column("transaction_tags", &id, &id)?, count)))
+            .collect()
+    }
+
+    /// Removes every link between these tags and any transaction.
+    ///
+    /// Used when the user asks for a deleted tag to be taken off their history as
+    /// well, rather than left showing on old transactions. Returns how many links
+    /// went.
+    pub async fn strip_tags_from_transactions(db: &Db, tags: &[Uuid]) -> Result<u64, DbError> {
+        if tags.is_empty() {
+            return Ok(0);
+        }
+
+        let mut removed = 0u64;
+        let mut conn = db.pool().begin().await?;
+        for tag in tags {
+            let result = sqlx::query("DELETE FROM transaction_tags WHERE tag_id = ?")
+                .bind(tag.to_string())
+                .execute(&mut *conn)
+                .await?;
+            removed += result.rows_affected();
+        }
+        conn.commit().await?;
+        Ok(removed)
+    }
 }
 
 /// Removes every tag, along with the transaction links that pointed at them.

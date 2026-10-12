@@ -13,8 +13,8 @@ use gloo_net::http::Request;
 use myledger_core::{
     Cadence, DocumentExtractionRule, ErrorResponse, ExtractionResponse, ImportCsvReport,
     ImportOptions, KeepSuggestionRequest, LoginRequest, LoginResponse, MeResponse,
-    PreferencesRequest, PreferencesResponse, RecurringItem, RecurringKind, StateResponse,
-    StoredExtractionResponse, SuggestionsResponse, Transaction,
+    PreferencesRequest, PreferencesResponse, RecurringItem, RecurringKind, SmsParseRule,
+    StateResponse, StoredExtractionResponse, SuggestionsResponse, Transaction,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -471,6 +471,69 @@ fn encode(segment: &str) -> String {
         }
     }
     out
+}
+
+/// An SMS parsing rule, as the form sends it.
+///
+/// The same fields as a document extraction rule, because they are the same
+/// idea applied to different text — but a separate endpoint and a separate
+/// table, so a pattern written for a bank's messages is never run against a
+/// receipt.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct SmsRuleInput {
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_pattern: Option<String>,
+    pub body_regex: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount_group: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merchant_group: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date_group: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind_hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_category_id: Option<Uuid>,
+    pub enabled: bool,
+}
+
+/// `POST /api/v1/sms-rules`.
+pub async fn create_sms_rule(input: &SmsRuleInput) -> ApiResult<SmsParseRule> {
+    post("/sms-rules", input).await
+}
+
+/// `PATCH /api/v1/sms-rules/{id}` — a whole-rule update.
+///
+/// The fields are sent in full rather than as a patch of changed ones: the
+/// server validates a rule as a whole, and a half-sent rule is one it has to
+/// reconstruct before it can say whether it is valid.
+pub async fn update_sms_rule(id: Uuid, input: &SmsRuleInput) -> ApiResult<SmsParseRule> {
+    let request = Request::patch(&url(&format!("/sms-rules/{id}")))
+        .credentials(RequestCredentials::SameOrigin)
+        .json(input)
+        .map_err(ApiFailure::offline)?;
+    send(request).await
+}
+
+/// `PATCH /api/v1/sms-rules/{id}` — just the enabled flag, for the toggle.
+pub async fn toggle_sms_rule(id: Uuid, enabled: bool) -> ApiResult<()> {
+    let request = Request::patch(&url(&format!("/sms-rules/{id}")))
+        .credentials(RequestCredentials::SameOrigin)
+        .json(&serde_json::json!({ "enabled": enabled }))
+        .map_err(ApiFailure::offline)?;
+    send_discarding(request).await
+}
+
+/// `DELETE /api/v1/sms-rules/{id}`.
+pub async fn delete_sms_rule(id: Uuid) -> ApiResult<()> {
+    let request = Request::delete(&url(&format!("/sms-rules/{id}")))
+        .credentials(RequestCredentials::SameOrigin)
+        .build()
+        .map_err(ApiFailure::offline)?;
+    send_discarding(request).await
 }
 
 /// `POST /api/v1/auth/logout`.

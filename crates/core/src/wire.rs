@@ -36,6 +36,12 @@ pub struct StateResponse {
     pub categories: Vec<Category>,
     pub accounts: Vec<Account>,
     pub tags: Vec<Tag>,
+    /// How many live transactions carry each tag.
+    ///
+    /// Counted by the server over the whole history, not over the capped list
+    /// of transactions above — otherwise a long ledger would show a tag as
+    /// less used than it is.
+    pub tag_usage: Vec<TagUsage>,
 
     pub rules: Vec<Rule>,
     pub sms_parse_rules: Vec<SmsParseRule>,
@@ -55,6 +61,12 @@ pub struct StateResponse {
 }
 
 impl StateResponse {
+    /// How many live transactions carry one tag.
+    pub fn tag_use_count(&self, id: uuid::Uuid) -> i64 {
+        self.tag_usage.iter().find(|use_of| use_of.tag_id == id).map_or(0, |u| u.transactions)
+    }
+
+
     /// The categories a user may still file something under.
     pub fn live_categories(&self) -> impl Iterator<Item = &Category> {
         self.categories.iter().filter(|c| c.deleted_at.is_none())
@@ -228,6 +240,15 @@ pub struct PreferencesRequest {
     pub accounts: Option<Vec<NamedInput>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<NamedInput>>,
+    /// Whether a tag this request removes should also come off the
+    /// transactions already filed against it.
+    ///
+    /// Absent or false leaves history alone: the tag stops being offered, and
+    /// old entries still show it, which is why they still make sense. True
+    /// deletes the links as well, which cannot be undone. The destructive
+    /// reading is never what a client gets by saying nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strip_removed_tags: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rules: Option<Vec<RuleInput>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -259,6 +280,16 @@ pub struct PreferencesResponse {
     pub categories: Vec<Category>,
     pub accounts: Vec<Account>,
     pub tags: Vec<Tag>,
+    /// How many live transactions carry each tag, recounted after the update.
+    ///
+    /// Deleting a tag can change these, and the screen that just did it is
+    /// about to redraw them.
+    pub tag_usage: Vec<TagUsage>,
+    /// Tag links removed from transactions, when `strip_removed_tags` asked
+    /// for it. Reported so the screen can say how many entries changed
+    /// rather than leaving the user to wonder.
+    #[serde(default)]
+    pub tag_links_removed: u64,
     pub rules: Vec<Rule>,
     pub budgets: Vec<Budget>,
     pub goals: Vec<Goal>,
@@ -420,4 +451,11 @@ pub struct KeepSuggestionRequest {
     pub next_date: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<crate::model::RecurringKind>,
+}
+
+/// A tag and how many transactions use it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TagUsage {
+    pub tag_id: uuid::Uuid,
+    pub transactions: i64,
 }

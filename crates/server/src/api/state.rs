@@ -11,7 +11,7 @@
 
 use axum::Json;
 use axum::extract::State;
-use myledger_core::{StateResponse, now_timestamp};
+use myledger_core::{StateResponse, TagUsage, now_timestamp};
 use myledger_db::lookups::{accounts, categories, tags};
 use myledger_db::{
     budgets, dismissed, documents as db_documents, goals, recurring_items, rules, seed, settings,
@@ -51,6 +51,11 @@ pub async fn get_state(State(state): State<AppState>) -> Result<Json<StateRespon
         categories: categories::list_all_categories(db).await?,
         accounts: accounts::list_all_accounts(db).await?,
         tags: tags::list_all_tags(db).await?,
+        tag_usage: tags::tag_usage(db)
+            .await?
+            .into_iter()
+            .map(|(tag_id, transactions)| TagUsage { tag_id, transactions })
+            .collect(),
         rules: rules::list_rules(db).await?,
         sms_parse_rules: sms_rules::list_sms_rules(db).await?,
         document_extraction_rules: db_extraction::list_rules(db).await?,

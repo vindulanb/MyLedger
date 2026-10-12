@@ -21,7 +21,6 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use myledger_core::{SmsKindHint, SmsParseRule, now_timestamp};
 use myledger_db::sms_rules as db_sms_rules;
-use regex::Regex;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -211,49 +210,16 @@ fn blank_to_none(value: Option<String>) -> Option<String> {
 }
 
 /// Checks that a rule could actually do its job.
+/// Refuses a rule that could never work.
+///
+/// Delegates to `core::textrules::check_rule`, the same check the document
+/// extraction rules use and the same engine that will run these rules on the
+/// phone. There was a second copy of this logic here; two copies of "what
+/// makes a rule valid" is how a rule starts being accepted by the server and
+/// then rejected by whatever has to run it.
 fn check_rule(rule: &SmsParseRule) -> Result<(), ApiError> {
-    if rule.body_regex.is_empty() {
-        return Err(ApiError::bad_request("a rule needs a body_regex to match messages with"));
-    }
-
-    let body = Regex::new(&rule.body_regex).map_err(|e| {
-        ApiError::bad_request(format!("body_regex is not a valid regular expression: {e}"))
-    })?;
-
-    if let Some(pattern) = &rule.sender_pattern {
-        Regex::new(pattern).map_err(|e| {
-            ApiError::bad_request(format!("sender_pattern is not a valid regular expression: {e}"))
-        })?;
-    }
-
-    // `captures_len` counts group 0 — the whole match — so the highest usable
-    // group number is one less.
-    let highest_group = body.captures_len() as i64 - 1;
-    for (name, group) in [
-        ("amount_group", rule.amount_group),
-        ("merchant_group", rule.merchant_group),
-        ("date_group", rule.date_group),
-    ] {
-        let Some(group) = group else { continue };
-        if group < 1 {
-            return Err(ApiError::bad_request(format!(
-                "{name} must be 1 or more; group 0 is the whole match, which is never what you want"
-            )));
-        }
-        if group > highest_group {
-            return Err(ApiError::bad_request(format!(
-                "{name} is {group}, but body_regex has only {highest_group} capture group(s)"
-            )));
-        }
-    }
-
-    if rule.amount_group.is_none() {
-        return Err(ApiError::bad_request(
-            "a rule needs an amount_group; without it there is no transaction to create",
-        ));
-    }
-
-    Ok(())
+    myledger_core::textrules::check_rule(&rule.as_view())
+        .map_err(|problem| ApiError::bad_request(problem.to_string()))
 }
 
 #[cfg(test)]
@@ -289,29 +255,31 @@ mod tests {
     fn a_regex_that_does_not_compile_is_refused() {
         let subject = rule(r"spent \$([0-9.]+ at", Some(1), None);
         let err = check_rule(&subject).unwrap_err().to_string();
-        assert!(err.contains("body_regex is not a valid"), "{err}");
+        assert!(err.contains("not a valid regex"), "{err}");
     }
 
     #[test]
     fn a_group_number_beyond_the_regex_is_refused() {
         let subject = rule(r"spent \$([0-9.]+)", Some(1), Some(4));
         let err = check_rule(&subject).unwrap_err().to_string();
-        assert!(err.contains("merchant_group is 4"), "{err}");
-        assert!(err.contains("only 1 capture group"), "{err}");
+        assert!(err.contains("merchant group is 4"), "{err}");
+        assert!(err.contains("1 capture group"), "{err}");
     }
 
     #[test]
     fn group_zero_is_refused_because_it_is_the_whole_message() {
         let subject = rule(r"spent \$([0-9.]+)", Some(0), None);
         let err = check_rule(&subject).unwrap_err().to_string();
-        assert!(err.contains("must be 1 or more"), "{err}");
+        // Group 0 is the whole match, so it is reported the same way as
+        // any other out-of-range group.
+        assert!(err.contains("amount group is 0"), "{err}");
     }
 
     #[test]
     fn a_rule_with_no_amount_group_cannot_produce_a_transaction() {
         let subject = rule(r"spent \$([0-9.]+)", None, None);
         let err = check_rule(&subject).unwrap_err().to_string();
-        assert!(err.contains("needs an amount_group"), "{err}");
+        assert!(err.contains("no amount group"), "{err}");
     }
 
     #[test]
@@ -326,7 +294,7 @@ mod tests {
         let mut subject = rule(r"spent \$([0-9.]+)", Some(1), None);
         subject.sender_pattern = Some("[unclosed".to_string());
         let err = check_rule(&subject).unwrap_err().to_string();
-        assert!(err.contains("sender_pattern"), "{err}");
+        assert!(err.contains("sender pattern"), "{err}");
     }
 
     #[test]

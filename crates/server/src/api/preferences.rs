@@ -15,7 +15,8 @@ use std::collections::HashSet;
 use axum::Json;
 use axum::extract::State;
 use myledger_core::{
-    Account, Budget, Category, Goal, RecurringItem, Rule, Tag, normalize_merchant, now_timestamp,
+    Account, Budget, Category, Goal, RecurringItem, Rule, Tag, TagUsage, normalize_merchant,
+    now_timestamp,
 };
 // The request and response shapes live in `core::wire`: the web app builds
 // them and this module parses them, so one definition is what keeps the two
@@ -93,9 +94,19 @@ pub async fn put_preferences(
         apply_account_plan(db, account_plan).await?;
         updated.push("accounts");
     }
+    let mut tag_links_removed = 0u64;
     if request.tags.is_some() {
+        // The IDs are needed before the plan is consumed by applying it.
+        let removed = tag_plan.deletes.clone();
         apply_tag_plan(db, tag_plan).await?;
         updated.push("tags");
+
+        // Only ever on an explicit request, and only for the tags this
+        // request actually removed — never for one deleted earlier.
+        if request.strip_removed_tags == Some(true) && !removed.is_empty() {
+            tag_links_removed = tags::strip_tags_from_transactions(db, &removed).await?;
+            updated.push("tag_links");
+        }
     }
     if let Some(rules) = request.rules {
         sync_rules(db, rules).await?;
@@ -138,12 +149,18 @@ pub async fn put_preferences(
     }
 
     Ok(Json(PreferencesResponse {
+        tag_links_removed,
         // The shared shape holds owned strings so a client can deserialise
         // it; the push sites stay `&'static str`.
         updated: updated.into_iter().map(String::from).collect(),
         categories: categories::list_all_categories(db).await?,
         accounts: accounts::list_all_accounts(db).await?,
         tags: tags::list_all_tags(db).await?,
+        tag_usage: tags::tag_usage(db)
+            .await?
+            .into_iter()
+            .map(|(tag_id, transactions)| TagUsage { tag_id, transactions })
+            .collect(),
         rules: db_rules::list_rules(db).await?,
         budgets: budgets::list_budgets(db).await?,
         goals: goals::list_goals(db).await?,
